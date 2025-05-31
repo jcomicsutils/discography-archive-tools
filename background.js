@@ -449,20 +449,20 @@ browser.runtime.onInstalled.addListener(() => {
     });
 
     browser.contextMenus.create({
-      id: "click-download",
-      parentId: "bandcamp-tools",
-      title: "Download (NYP/Free & Process Steps)", 
-      contexts: ["page"],
-      documentUrlPatterns: ["*://*.bandcamp.com/*"]
-    });
-
-    browser.contextMenus.create({
       id: "copy-keywords",
       parentId: "bandcamp-tools",
-      title: "Copy All Tags to Clipboard",
+      title: "Copy All Tags",
       contexts: ["page"],
       documentUrlPatterns: ["*://*.bandcamp.com/*"] 
     });
+
+    browser.contextMenus.create({
+      id: "click-download",
+      parentId: "bandcamp-tools",
+      title: "Download NYP/Free", 
+      contexts: ["page"],
+      documentUrlPatterns: ["*://*.bandcamp.com/*"]
+    });    
 
     browser.contextMenus.create({
       id: "copy-nyp-titles-urls",
