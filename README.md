@@ -1,3 +1,4 @@
+![Discography Archive Tools Logo](./logo.svg)
 # [Discography Archive Tools]
 
 A Firefox browser extension designed to help the archival of music from Bandcamp features for tab management, automated download assistance for "Name Your Price" (NYP) and free items, and convenient data extraction. Made with the help of the Gemini AI.
