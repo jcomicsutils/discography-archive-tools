@@ -1,0 +1,24 @@
+<svg width="128" height="128" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'">
+  <title>Discography Archive Tools Logo - Stack of Vinyls</title>
+  
+  <defs>
+    <style>
+      .vinyl-disc { fill: #2c3e50; } /* Dark blue-grey for vinyl */
+      .vinyl-label { fill: #ecf0f1; } /* Light grey for label */
+      .vinyl-hole { fill: #222222; }  /* Darker for hole */
+    </style>
+  </defs>
+
+  <ellipse cx="47" cy="65" rx="38" ry="10" class="vinyl-disc" />
+  <ellipse cx="47" cy="65" rx="14" ry="3.5" class="vinyl-label" />
+  <ellipse cx="47" cy="65" rx="3.5" ry="1" class="vinyl-hole" />
+
+  <ellipse cx="50" cy="55" rx="40" ry="11" class="vinyl-disc" />
+  <ellipse cx="50" cy="55" rx="15" ry="4" class="vinyl-label" />
+  <ellipse cx="50" cy="55" rx="4" ry="1.2" class="vinyl-hole" />
+  
+  <ellipse cx="53" cy="45" rx="42" ry="12" class="vinyl-disc" />
+  <ellipse cx="53" cy="45" rx="16" ry="4.5" class="vinyl-label" />
+  <ellipse cx="53" cy="45" rx="4.5" ry="1.3" class="vinyl-hole" />
+
+</svg>
