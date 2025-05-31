@@ -8,7 +8,8 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 * **Automated Download for NYP/Free Items**: Simplifies acquiring NYP/Free music by:
     * Clicking the initial download button on the page.
     * Automatically entering "0" as the price for "Name Your Price" items.
-    * Proceeding through subsequent confirmation steps. If the download requires and email address you'll need to this step manually.
+    * Proceeding through subsequent confirmation steps. If the download requires and email address you'll need to do this step manually.
+    * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) extension is recommended for downloading everything at once.
 * **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs, extracts the associated keywords/tags from their page metadata, removes duplicates, formats them into a single semicolon-separated string (e.g., `tag1; tag2; tag3`), and copies this list to your clipboard.
 * **Copy NYP/Free Titles & URLs**: Identifies all active Bandcamp tabs classified as NYP or Free, then collects their page titles and URLs. This information is formatted as a list (title on one line, URL on the next, then the next title, etc.) and copied to your clipboard.
 * **Copy Paid Titles & URLs**: Similar to the above, but specifically targets tabs classified as "Paid," collecting and formatting their titles and URLs for clipboard copying.
