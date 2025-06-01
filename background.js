@@ -13,6 +13,31 @@ function isActiveTab(tab, functionName) {
     return isActive;
 }
 
+// Helper function to get file extension from MIME type
+function getExtensionFromMimeType(mimeType) {
+    if (!mimeType) return 'jpg'; // Default extension
+    switch (mimeType.toLowerCase()) {
+        case 'image/jpeg':
+        case 'image/jpg':
+            return 'jpg';
+        case 'image/png':
+            return 'png';
+        case 'image/gif':
+            return 'gif';
+        case 'image/webp':
+            return 'webp';
+        case 'image/bmp':
+            return 'bmp';
+        default:
+            const parts = mimeType.split('/');
+            if (parts.length === 2 && parts[0] === 'image') {
+                const potentialExt = parts[1].replace(/^x-/, '');
+                if (potentialExt.length > 0 && potentialExt.length < 5) return potentialExt;
+            }
+            return 'jpg'; 
+    }
+}
+
 // Sort tabs in current window based on classification
 async function sortTabsAcrossWindow() {
   console.log("INFO: SortTabs: Starting function execution...");
@@ -311,7 +336,7 @@ async function copyAllKeywordsToClipboard() {
     await copyTextToClipboard(formattedKeywords); 
 }
 
-// New function to copy titles and URLs based on classification type
+// Function to copy titles and URLs based on classification type
 async function copyTitlesAndUrls(requestedType) { 
     console.log(`INFO: copyTitlesAndUrls: Starting for type "${requestedType}"...`);
     classifications = {}; 
@@ -385,6 +410,235 @@ async function copyTitlesAndUrls(requestedType) {
     }
 }
 
+// Helper function to download an image and its high-resolution (_0) variant
+async function downloadImagePair(baseName, imageUrl, tabOrigin) {
+    if (!imageUrl) {
+        console.log(`INFO: DownloadImages: No URL provided for image type "${baseName}", skipping this pair.`);
+        return;
+    }
+
+    let absoluteImageUrl = imageUrl;
+    if (absoluteImageUrl.startsWith('/')) { 
+        absoluteImageUrl = tabOrigin + absoluteImageUrl;
+    }
+
+    const urlObjForCheck = new URL(absoluteImageUrl);
+    const pathPartsForCheck = urlObjForCheck.pathname.split('/');
+    const fileNameForCheck = pathPartsForCheck[pathPartsForCheck.length - 1];
+
+    if (fileNameForCheck && fileNameForCheck.toLowerCase().startsWith('blank.')) {
+        console.log(`INFO: DownloadImages: Skipping download for "${baseName}" as it appears to be a blank image: ${absoluteImageUrl}`);
+        return; 
+    }
+    
+    console.log(`INFO: DownloadImages: Processing image pair for "${baseName}" from URL: ${absoluteImageUrl}`);
+
+    try {
+        const urlObj = new URL(absoluteImageUrl); 
+        const urlPathParts = urlObj.pathname.split('/');
+        const originalFileNameWithExt = urlPathParts[urlPathParts.length - 1]; 
+
+        let originalExtension = 'jpg'; 
+        const dotIndex = originalFileNameWithExt.lastIndexOf('.');
+        if (dotIndex > 0 && dotIndex < originalFileNameWithExt.length - 1) {
+            originalExtension = originalFileNameWithExt.substring(dotIndex + 1).toLowerCase();
+        }
+        
+        const filename1 = baseName + "." + originalExtension;
+        console.log(`INFO: DownloadImages: Attempting to download (original) ${absoluteImageUrl} as ${filename1}`);
+        browser.downloads.download({
+            url: absoluteImageUrl,
+            filename: filename1,
+            conflictAction: 'uniquify' 
+        }).then(
+            (downloadId) => {
+                if (downloadId) {
+                    console.log(`INFO: DownloadImages: Download (original ${baseName}) started with ID: ${downloadId} for ${filename1}`);
+                } else {
+                    const error = browser.runtime.lastError;
+                    console.warn(`WARN: DownloadImages: Download (original ${baseName}) for ${filename1} did not start. Error: ${error ? error.message : 'Unknown'}`);
+                }
+            },
+            (error) => console.error(`ERROR: DownloadImages: Download (original ${baseName}) failed for ${filename1}:`, error.toString())
+        );
+
+        const fileNameNoExt = (dotIndex > 0) ? originalFileNameWithExt.substring(0, dotIndex) : originalFileNameWithExt;
+        const lastUnderscoreIdx = fileNameNoExt.lastIndexOf('_');
+        
+        if (lastUnderscoreIdx === -1 || lastUnderscoreIdx === 0 || lastUnderscoreIdx === fileNameNoExt.length - 1) { 
+            console.warn(`WARN: DownloadImages: For "${baseName}", filename part "${fileNameNoExt}" does not match expected 'identifier_digits' structure for a _0 version. Skipping _0 download.`);
+            return; 
+        }
+        
+        const number1Part = fileNameNoExt.substring(0, lastUnderscoreIdx); 
+        const baseImgDomainPath = urlObj.protocol + '//' + urlObj.hostname + (urlObj.port ? ':' + urlObj.port : '') + urlPathParts.slice(0, -1).join('/') + '/';
+        const highResImageUrl = baseImgDomainPath + number1Part + "_0";
+        
+        let detectedExtension = 'jpg'; 
+
+        try {
+            console.log(`INFO: DownloadImages: Fetching headers/type for ${highResImageUrl} (${baseName}_orig)`);
+            let response = await fetch(highResImageUrl, { method: 'HEAD' });
+            let contentType = response.headers.get('Content-Type');
+
+            if (!response.ok || !contentType || !contentType.startsWith('image/')) {
+                console.warn(`WARN: DownloadImages: HEAD request for ${highResImageUrl} (${baseName}_orig) failed (${response.status}) or no valid image Content-Type. Trying GET.`);
+                response = await fetch(highResImageUrl); 
+                if (response.ok) {
+                    const blob = await response.blob();
+                    contentType = blob.type;
+                } else {
+                    console.error(`ERROR: DownloadImages: GET request for ${highResImageUrl} (${baseName}_orig) also failed (${response.status}). Using default extension.`);
+                    contentType = null; 
+                }
+            }
+            
+            if (contentType && contentType.startsWith('image/')) {
+                detectedExtension = getExtensionFromMimeType(contentType);
+                 console.log(`INFO: DownloadImages: Detected Content-Type "${contentType}", using extension ".${detectedExtension}" for ${baseName}_orig.`);
+            } else {
+                 console.warn(`WARN: DownloadImages: Could not determine valid Content-Type for ${highResImageUrl} (${baseName}_orig). Using default extension '.${detectedExtension}'. Found: ${contentType}`);
+            }
+        } catch (fetchError) {
+            console.error(`ERROR: DownloadImages: Network error for ${highResImageUrl} (${baseName}_orig). Using default extension '.${detectedExtension}'. Error:`, fetchError);
+        }
+        
+        const filename2 = baseName + "_orig." + detectedExtension; 
+
+        console.log(`INFO: DownloadImages: Attempting to download (_0 version) ${highResImageUrl} as ${filename2}`);
+        browser.downloads.download({
+            url: highResImageUrl,
+            filename: filename2,
+            conflictAction: 'uniquify'
+        }).then(
+            (downloadId) => {
+                 if (downloadId) {
+                    console.log(`INFO: DownloadImages: Download (_0 ${baseName}) started with ID: ${downloadId} for ${filename2}`);
+                } else {
+                    const error = browser.runtime.lastError;
+                    console.warn(`WARN: DownloadImages: Download (_0 ${baseName}) for ${filename2} did not start. Error: ${error ? error.message : 'Unknown'}`);
+                }
+            },
+            (error) => console.error(`ERROR: DownloadImages: Download (_0 ${baseName}) failed for ${filename2}:`, error.toString())
+        );
+
+    } catch (e) {
+        console.error(`ERROR: DownloadImages: Unexpected error processing image pair for "${baseName}" from URL ${absoluteImageUrl}:`, e);
+    }
+}
+
+// Main function to download images from the current Bandcamp page
+async function downloadBandcampPageImage(tab) {
+    if (!tab || !tab.id) {
+        console.error("ERROR: DownloadImages: Invalid tab object provided.");
+        return;
+    }
+    
+    const tabUrl = tab.url;
+    let isValidPageType = false;
+    if (tabUrl) {
+        const mainPagePattern = /^https?:\/\/[^/.]+\.bandcamp\.com\/?(?:[?#]|$)/;
+        const musicPagePattern = /^https?:\/\/[^/.]+\.bandcamp\.com\/music(?:[?#]|$)/; 
+        const albumPagePattern = /bandcamp\.com\/album\//;
+        const trackPagePattern = /bandcamp\.com\/track\//;
+
+        if (albumPagePattern.test(tabUrl) || trackPagePattern.test(tabUrl) || musicPagePattern.test(tabUrl) || mainPagePattern.test(tabUrl)) {
+            if (tabUrl.match(/^https?:\/\/bandcamp\.com\/?(?:[?#]|$)/) || 
+                tabUrl.includes("/discover") || tabUrl.includes("/feed") || 
+                tabUrl.includes("/tags") || tabUrl.includes("/artists") ||
+                (mainPagePattern.test(tabUrl) && (tabUrl.includes("/followers") || tabUrl.includes("/following")))) {
+                 isValidPageType = false;
+                 if (albumPagePattern.test(tabUrl) || trackPagePattern.test(tabUrl) || musicPagePattern.test(tabUrl) || 
+                     (mainPagePattern.test(tabUrl) && !tabUrl.match(/^https?:\/\/bandcamp\.com\//) && !tabUrl.includes("/followers") && !tabUrl.includes("/following"))) {
+                     isValidPageType = true; 
+                 }
+            } else {
+                isValidPageType = true;
+            }
+        }
+    }
+
+    if (!isValidPageType) {
+        console.log(`INFO: DownloadImages: Tab ${tab.id} (${tabUrl}) is not a targeted Bandcamp page (specific artist page, /music, album, or track).`);
+        return;
+    }
+
+    console.log(`INFO: DownloadImages: Processing tab ID ${tab.id}, URL: ${tabUrl}`);
+
+    let imageUrls;
+    try {
+        const tabIdForInjection = tab.id; 
+        const results = await browser.tabs.executeScript(tab.id, {
+            code: `
+                (function() {
+                    const data = { popupImageUrl: null, customHeaderUrl: null, backgroundImageUrl: null };
+
+                    // 1. Artist Image
+                    const popupLink = document.querySelector('a.popupImage');
+                    if (popupLink?.href) {
+                        data.popupImageUrl = popupLink.href;
+                    } else {
+                        const bioPicImg = document.querySelector('#bio-container .popupImage img, .band-photo');
+                        if (bioPicImg?.src) data.popupImageUrl = bioPicImg.src;
+                    }
+
+                    // 2. Custom Header
+                    const headerImg = document.querySelector('#customHeader img');
+                    if (headerImg?.src) {
+                        data.customHeaderUrl = headerImg.src;
+                    }
+
+                    // 3. Background Image
+                    const styleTag = document.querySelector('style#custom-design-rules-style');
+                    if (styleTag?.textContent) {
+                        const cssText = styleTag.textContent;
+                        const bgImageRegex = /background-image:\\s*url\\((['"]?)(.*?)\\1\\)/i;
+                        const match = cssText.match(bgImageRegex);
+                        if (match && match[2]) {
+                            data.backgroundImageUrl = match[2];
+                        }
+                    }
+
+                    return data;
+                })();
+            `
+        });
+        if (results && results.length > 0 && results[0]) {
+            imageUrls = results[0];
+        }
+    } catch (e) {
+        console.error(`ERROR: DownloadImages: Failed to execute script on tab ${tab.id} to get image URLs:`, e);
+        return;
+    }
+
+    if (!imageUrls || (!imageUrls.popupImageUrl && !imageUrls.customHeaderUrl && !imageUrls.backgroundImageUrl)) {
+        console.log(`INFO: DownloadImages: No target images (Artist, Header, or Background) found on tab ${tab.id} (${tabUrl}).`);
+        if (!imageUrls.popupImageUrl && !imageUrls.customHeaderUrl && !imageUrls.backgroundImageUrl) {
+             return;
+        }
+    }
+
+    const tabOrigin = new URL(tabUrl).origin;
+
+    if (imageUrls.popupImageUrl) {
+        await downloadImagePair("Artist Image", imageUrls.popupImageUrl, tabOrigin);
+    } else {
+        console.log("INFO: DownloadImages: No 'Artist Image' found to download.");
+    }
+
+    if (imageUrls.customHeaderUrl) {
+        await downloadImagePair("Custom Header", imageUrls.customHeaderUrl, tabOrigin);
+    } else {
+        console.log("INFO: DownloadImages: No 'Custom Header' image found to download.");
+    }
+    
+    if (imageUrls.backgroundImageUrl) {
+        await downloadImagePair("Background Image", imageUrls.backgroundImageUrl, tabOrigin);
+    } else {
+        console.log("INFO: DownloadImages: No 'Background Image' from style tag found to download.");
+    }
+}
+
 
 async function copyTextToClipboard(text) {
     try {
@@ -436,7 +690,7 @@ browser.runtime.onInstalled.addListener(() => {
     browser.contextMenus.create({
       id: "bandcamp-tools",
       title: "Bandcamp Tools",
-      contexts: ["page"],
+      contexts: ["page", "image"], 
       documentUrlPatterns: ["*://*.bandcamp.com/*"] 
     });
 
@@ -449,20 +703,20 @@ browser.runtime.onInstalled.addListener(() => {
     });
 
     browser.contextMenus.create({
+      id: "click-download",
+      parentId: "bandcamp-tools",
+      title: "Download (NYP/Free)", 
+      contexts: ["page"],
+      documentUrlPatterns: ["*://*.bandcamp.com/*"]
+    });
+
+    browser.contextMenus.create({
       id: "copy-keywords",
       parentId: "bandcamp-tools",
       title: "Copy All Tags",
       contexts: ["page"],
       documentUrlPatterns: ["*://*.bandcamp.com/*"] 
     });
-
-    browser.contextMenus.create({
-      id: "click-download",
-      parentId: "bandcamp-tools",
-      title: "Download NYP/Free", 
-      contexts: ["page"],
-      documentUrlPatterns: ["*://*.bandcamp.com/*"]
-    });    
 
     browser.contextMenus.create({
       id: "copy-nyp-titles-urls",
@@ -480,6 +734,20 @@ browser.runtime.onInstalled.addListener(() => {
       documentUrlPatterns: ["*://*.bandcamp.com/*"]
     });
 
+    browser.contextMenus.create({
+      id: "download-images",
+      parentId: "bandcamp-tools",
+      title: "Download Images (Artist, Header, Background)", 
+      contexts: ["page", "image"], 
+      documentUrlPatterns: [ 
+          "*://*.bandcamp.com/album/*",
+          "*://*.bandcamp.com/track/*",
+          "*://*.bandcamp.com/music",
+          "*://*.bandcamp.com/music?*",
+          "*://*.bandcamp.com/" 
+      ]
+    });
+
     console.log("INFO: background.js: All context menus registration attempt complete.");
   } catch (e) {
     console.error("ERROR: background.js: Major failure during context menu creation in onInstalled:", e);
@@ -488,33 +756,51 @@ browser.runtime.onInstalled.addListener(() => {
 
 browser.contextMenus.onClicked.addListener((info, tab) => {
   console.log(`INFO: Context menu item clicked: ${info.menuItemId}`);
-  if (info.menuItemId === "sort-tabs") {
-    sortTabsAcrossWindow();
-  } else if (info.menuItemId === "click-download") {
-    clickDownloadAllNonPaid();
-  } else if (info.menuItemId === "copy-keywords") {
-    copyAllKeywordsToClipboard();
-  } else if (info.menuItemId === "copy-nyp-titles-urls") {
-    copyTitlesAndUrls('nypFree');
-  } else if (info.menuItemId === "copy-paid-titles-urls") {
-    copyTitlesAndUrls('paid');
+  let targetTab = tab;
+
+  switch (info.menuItemId) {
+    case "sort-tabs":
+      sortTabsAcrossWindow();
+      break;
+    case "click-download":
+      clickDownloadAllNonPaid();
+      break;
+    case "copy-keywords":
+      copyAllKeywordsToClipboard();
+      break;
+    case "copy-nyp-titles-urls":
+      copyTitlesAndUrls('nypFree');
+      break;
+    case "copy-paid-titles-urls":
+      copyTitlesAndUrls('paid');
+      break;
+    case "download-images":
+      if (targetTab && targetTab.id && isActiveTab(targetTab, "DownloadImagesContext")) {
+          downloadBandcampPageImage(targetTab);
+      } else {
+          console.warn(`WARN: DownloadImages (Context Menu): Problem with initial tab from context. Info:`, info, `Tab:`, targetTab, `Falling back to active tab.`);
+          browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+                if (tabs.length > 0 && tabs[0].id && isActiveTab(tabs[0], "DownloadImagesContextFallback")) {
+                    downloadBandcampPageImage(tabs[0]);
+                } else {
+                    console.log("INFO: DownloadImages (Context Menu Fallback): No suitable active tab found or it's not a valid Bandcamp page.");
+                }
+            }).catch(err => console.error("ERROR: DownloadImages (Context Menu Fallback): Error querying active tab:", err));
+      }
+      break;
+    default:
+      console.warn(`WARN: Unknown context menu item ID: ${info.menuItemId}`);
   }
 });
 
-// REMOVE the old browserAction.onClicked listener:
-// browser.browserAction.onClicked.addListener(sortTabsAcrossWindow); 
-// This line is now removed or commented out because the popup handles the browser action.
-
-// Update browser.runtime.onMessage listener to handle both classification and popup actions
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // Handle messages from content script for classification
     if (message.type === 'classification' && sender.tab?.id != null) {
         classifications[sender.tab.id] = message.value;
         console.log(`INFO: Classification received from tab ${sender.tab.id}: ${message.value}`);
     } 
-    // Handle messages from popup.js
     else if (message.action) {
         console.log(`INFO: Action received from popup: ${message.action}`);
+        let activeTabPromise;
         switch (message.action) {
             case "sortTabs":
                 sortTabsAcrossWindow();
@@ -531,12 +817,23 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             case "copyPaidTitlesUrls":
                 copyTitlesAndUrls('paid');
                 break;
+            case "downloadImages":
+                activeTabPromise = browser.tabs.query({ active: true, currentWindow: true });
+                activeTabPromise.then(tabs => {
+                    if (tabs.length > 0 && tabs[0].id) {
+                         if (isActiveTab(tabs[0], "DownloadImagesPopup")) {
+                            downloadBandcampPageImage(tabs[0]);
+                        } else {
+                            console.log("INFO: DownloadImages (Popup): Active tab is hidden/discarded or not a valid Bandcamp page.");
+                        }
+                    } else {
+                        console.log("INFO: DownloadImages (Popup): No active tab found or active tab has no ID.");
+                    }
+                }).catch(err => console.error("ERROR: DownloadImages (Popup): Error querying active tab:", err));
+                break;
             default:
-                console.warn(`WARN: Unknown action received: ${message.action}`);
+                console.warn(`WARN: Unknown action received from popup: ${message.action}`);
         }
     }
-    // Return true if you intend to send a response asynchronously,
-    // otherwise, it's not strictly necessary if sendResponse is not called.
-    // For this case, we are not sending a response back to the popup from these actions.
     return false; 
 });

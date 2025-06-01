@@ -5,17 +5,32 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 
 ## Features
 
-* **Sort Bandcamp Tabs**: Automatically organizes open Bandcamp album/track tabs in your current window. It places "Paid" items to the left and "Name Your Price" (NYP) / "Free" items to the right.
-* **Automated Download for NYP/Free Items**: Simplifies acquiring NYP/Free music by:
-    * Clicking the initial download button on the page.
-    * Automatically entering "0" as the price for "Name Your Price" items.
-    * Proceeding through subsequent confirmation steps. If the download requires and email address you'll need to do this step manually.
+* **User Interface**: Access all tools conveniently via:
+    * A **Popup Menu**: Click the "Discography Archive Tools" icon in your browser toolbar.
+    * A **Context Menu**: Right-click on any Bandcamp page and find options under "Bandcamp Tools."
+
+* **Sort Bandcamp Tabs**: Automatically sorts your open Bandcamp album/track tabs in the current window, placing "Paid" items to the left and "Name Your Price" (NYP) / "Free" items to the right.
+
+* **Automated Download for NYP/Free Items**: For tabs identified as NYP or Free, this feature streamlines the download process:
+    * Clicks the initial download/purchase button.
+    * Automatically sets the price to "0" for "Name Your Price" items.
+    * Proceeding through subsequent confirmation steps. If the download requires an email address you'll need to do this step manually.
     * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) extension is recommended for downloading everything at once.
-* **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs, extracts the associated keywords/tags from their page metadata, removes duplicates, formats them into a single semicolon-separated string (e.g., `tag1; tag2; tag3`), and copies this list to your clipboard.
+
+* **Download Page Images**: From the active Bandcamp page, this feature attempts to download up to three key images:
+    * **Artist/Album Art**: The primary artwork or artist photo (typically from `a.popupImage` or identified fallbacks). Saved as `Artist Image.{original_extension}`.
+    * **Custom Header**: The banner image usually found at the top of artist pages. Saved as `Custom Header.{original_extension}`.
+    * **Page Background**: The full-page background image defined in the page's custom styles. Saved as `Background Image.{original_extension}`.
+    * For each of these images, it also attempts to download a higher-resolution or original version (often a `_0` variant), saved with an `_orig` suffix and an automatically detected file extension (e.g., `Artist Image_orig.png`).
+    * The feature skips downloading common placeholder "blank" images.
+
+* **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs, extracts the associated keywords or tags from their page metadata, removes duplicates, formats them into a single semicolon-separated list (e.g., `tag1; tag2; tag3`), and copies this list to your clipboard.
+
 * **Copy NYP/Free Titles & URLs**: Identifies all active Bandcamp tabs classified as NYP or Free, then collects their page titles and URLs. This information is formatted as a list (title on one line, URL on the next, then the next title, etc.) and copied to your clipboard.
+
 * **Copy Paid Titles & URLs**: Similar to the above, but specifically targets tabs classified as "Paid," collecting and formatting their titles and URLs for clipboard copying.
-* **Context Menu Integration**: All features are conveniently accessible via a right-click context menu when you are on a Bandcamp album or track page.
-* **Smart Tab Handling**: The extension is designed to ignore hidden or discarded tabs, ensuring that its operations are performed only on active and relevant pages for improved stability and accuracy.
+
+* **Smart Tab Handling**: All operations that iterate through tabs (sorting, data copying, etc.) ignore hidden or discarded tabs to ensure stability and process only active, relevant pages.
 
 ## How to Use
 

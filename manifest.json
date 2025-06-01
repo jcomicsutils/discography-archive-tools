@@ -7,7 +7,9 @@
     "tabs",
     "contextMenus",
     "*://*.bandcamp.com/*",
-    "clipboardWrite"
+    "*://f4.bcbits.com/*",
+    "clipboardWrite",
+    "downloads" 
   ],
   "background": {
     "scripts": ["background.js"]
