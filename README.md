@@ -72,17 +72,19 @@ This extension requests the following permissions, with explanations for why eac
     * To ensure context menu items appear only on Bandcamp domains.
 * **`clipboardWrite`**:
     * To allow the extension to copy the collected tags, titles, and URLs directly to your system clipboard for easy pasting into other applications.
+* **`downloads`**:
+    * To allow the extension to download images.
 
-### Known Issues & Limitations
+## Known Issues & Limitations
 * The automated download feature relies on specific CSS selectors on Bandcamp pages. If Bandcamp updates its website structure, these selectors might need to be updated in `background.js`.
 * The timing delays (`setTimeout`) in the download automation are generalized. On very slow connections or machines, they might occasionally be too short, potentially missing an element that hasn't loaded yet.
 
-### Future Ideas & Enhancements
+## Future Ideas & Enhancements
 * User-configurable settings (e.g., for delays, output formats).
 * Option to specify download locations (if browser APIs ever permit this level of control for extensions easily).
 * A popup UI for more complex interactions or status display.
 
-### License
+## License
 This project is released into the public domain via [The Unlicense](https://unlicense.org/).
 
 This means it is free and unencumbered software released into the public domain. Anyone is free to copy, modify, publish, use, compile, sell, or distribute this software, either in source code form or as a compiled binary, for any purpose, commercial or non-commercial, and by any means.
