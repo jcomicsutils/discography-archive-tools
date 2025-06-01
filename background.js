@@ -754,7 +754,6 @@ async function downloadImagePair(baseName, imageUrl, tabOrigin) {
 async function downloadBandcampPageImage(tab) {
     if (!tab || !tab.id) {
         console.error("ERROR: DownloadImages: Invalid tab object provided.");
-        await showPageNotification(null, "Error: No valid tab for image download.", "error");
         return;
     }
     
@@ -783,13 +782,11 @@ async function downloadBandcampPageImage(tab) {
     }
 
     if (!isValidPageType) {
-        console.log(`INFO: DownloadImages: Tab ${tab.id} (${tabUrl}) is not a targeted Bandcamp page.`);
-        await showPageNotification(tab.id, "Not a Bandcamp page for image download.", "error");
+        console.log(`INFO: DownloadImages: Tab ${tab.id} (${tabUrl}) is not a targeted Bandcamp page (specific artist page, /music, album, or track).`);
         return;
     }
 
     console.log(`INFO: DownloadImages: Processing tab ID ${tab.id}, URL: ${tabUrl}`);
-    // Initial notification moved to after image URL extraction
 
     let imageUrls;
     try {
@@ -797,75 +794,34 @@ async function downloadBandcampPageImage(tab) {
         const results = await browser.tabs.executeScript(tab.id, {
             code: `
                 (function() {
-                    let data = { popupImageUrl: null, customHeaderUrl: null, backgroundImageUrl: null };
-                    
-                    // 1. Popup Image (Main Art / Bio Pic)
+                    const data = { popupImageUrl: null, customHeaderUrl: null, backgroundImageUrl: null };
+
+                    // 1. Artist Image
                     const popupLink = document.querySelector('a.popupImage');
-                    if (popupLink && popupLink.href) {
+                    if (popupLink?.href) {
                         data.popupImageUrl = popupLink.href;
-                    } else { 
-                        const bioPicImg = document.querySelector('#bio-container .popupImage img, .band-photo');
-                        if (bioPicImg && bioPicImg.src) data.popupImageUrl = bioPicImg.src;
-                    }
-                    
-                    // 2. Custom Header Image
-                    const customHeaderWrapper = document.querySelector('div#customHeader');
-                    if (customHeaderWrapper) {
-                        const headerLinkAnchor = customHeaderWrapper.querySelector('a[href="/"][referrerpolicy="strict-origin-when-cross-origin"]');
-                        if (headerLinkAnchor) {
-                            const headerImg = headerLinkAnchor.querySelector('img');
-                            if (headerImg && headerImg.src) data.customHeaderUrl = headerImg.src;
-                        } else { 
-                            const directHeaderImg = customHeaderWrapper.querySelector('img');
-                            if(directHeaderImg && directHeaderImg.src) {
-                                const parentAnchor = directHeaderImg.closest('a');
-                                if (parentAnchor && parentAnchor.getAttribute('href') === '/') data.customHeaderUrl = directHeaderImg.src;
-                            }
-                        }
-                    }
-
-                    // 3. Background Image from inline style tag
-                    const styleTag = document.querySelector('style#custom-design-rules-style');
-                    if (styleTag && styleTag.textContent) {
-                        const cssText = styleTag.textContent;
-                        let bgUrl = null;
-                        let match;
-                        
-                        // Attempt to find the body rule content first
-                        const bodyRuleRegex = /body\s*\{([\s\S]*?)\}/i; 
-                        const bodyMatch = cssText.match(bodyRuleRegex);
-
-                        if (bodyMatch && bodyMatch[1]) {
-                            const bodyCssProperties = bodyMatch[1];
-
-                            // Try to match url("...")
-                            match = bodyCssProperties.match(/background-image\s*:\s*url\(\s*"([^"]*)"\s*\)/i);
-                            if (match && match[1]) {
-                                bgUrl = match[1].trim();
-                            } else {
-                                // Try to match url('...')
-                                match = bodyCssProperties.match(/background-image\s*:\s*url\(\s*'([^']*)'\s*\)/i);
-                                if (match && match[1]) {
-                                    bgUrl = match[1].trim();
-                                } else {
-                                    // Try to match url(...) without quotes
-                                    match = bodyCssProperties.match(/background-image\s*:\s*url\(\s*([^"'\)\s][^\)\s]*)\s*\)/i);
-                                    if (match && match[1]) {
-                                        bgUrl = match[1].trim();
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if (bgUrl) {
-                            data.backgroundImageUrl = bgUrl;
-                            console.log('INJECTED_SCRIPT_INFO: Found background image URL in style tag:', bgUrl);
-                        } else {
-                            console.log('INJECTED_SCRIPT_INFO: No background image URL found in style#custom-design-rules-style with multi-step regex.');
-                        }
                     } else {
-                        console.log('INJECTED_SCRIPT_INFO: style#custom-design-rules-style tag not found or has no content.');
+                        const bioPicImg = document.querySelector('#bio-container .popupImage img, .band-photo');
+                        if (bioPicImg?.src) data.popupImageUrl = bioPicImg.src;
                     }
+
+                    // 2. Custom Header
+                    const headerImg = document.querySelector('#customHeader img');
+                    if (headerImg?.src) {
+                        data.customHeaderUrl = headerImg.src;
+                    }
+
+                    // 3. Background Image
+                    const styleTag = document.querySelector('style#custom-design-rules-style');
+                    if (styleTag?.textContent) {
+                        const cssText = styleTag.textContent;
+                        const bgImageRegex = /background-image:\\s*url\\((['"]?)(.*?)\\1\\)/i;
+                        const match = cssText.match(bgImageRegex);
+                        if (match && match[2]) {
+                            data.backgroundImageUrl = match[2];
+                        }
+                    }
+
                     return data;
                 })();
             `
@@ -875,50 +831,34 @@ async function downloadBandcampPageImage(tab) {
         }
     } catch (e) {
         console.error(`ERROR: DownloadImages: Failed to execute script on tab ${tab.id} to get image URLs:`, e);
-        await showPageNotification(tab.id, "Error getting image URLs from page.", "error");
         return;
     }
 
     if (!imageUrls || (!imageUrls.popupImageUrl && !imageUrls.customHeaderUrl && !imageUrls.backgroundImageUrl)) {
         console.log(`INFO: DownloadImages: No target images (Artist, Header, or Background) found on tab ${tab.id} (${tabUrl}).`);
-        await showPageNotification(tab.id, "No target images found on this page.", "error");
-        return;
+        if (!imageUrls.popupImageUrl && !imageUrls.customHeaderUrl && !imageUrls.backgroundImageUrl) {
+             return;
+        }
     }
-    
-    await showPageNotification(tab.id, "Initiating image downloads...", "success", 2000);
+
     const tabOrigin = new URL(tabUrl).origin;
-    let downloadsInitiatedCount = 0;
 
     if (imageUrls.popupImageUrl) {
         await downloadImagePair("Artist Image", imageUrls.popupImageUrl, tabOrigin);
-        downloadsInitiatedCount++;
     } else {
         console.log("INFO: DownloadImages: No 'Artist Image' found to download.");
     }
 
     if (imageUrls.customHeaderUrl) {
         await downloadImagePair("Custom Header", imageUrls.customHeaderUrl, tabOrigin);
-        downloadsInitiatedCount++;
     } else {
         console.log("INFO: DownloadImages: No 'Custom Header' image found to download.");
     }
     
     if (imageUrls.backgroundImageUrl) {
         await downloadImagePair("Background Image", imageUrls.backgroundImageUrl, tabOrigin);
-        downloadsInitiatedCount++;
     } else {
         console.log("INFO: DownloadImages: No 'Background Image' from style tag found to download.");
-        // If this was the only potential image, downloadsInitiatedCount would be 0.
-        // Only show error if NOTHING was attempted.
-        if(downloadsInitiatedCount === 0 && !imageUrls.popupImageUrl && !imageUrls.customHeaderUrl) {
-           await showPageNotification(tab.id, "No background image URL extracted.", "error");
-        }
-    }
-
-    if (downloadsInitiatedCount === 0) {
-        // This case is mostly covered if all individual imageUrls were null.
-        // The initial check for (!imageUrls || (!imageUrls.popupImageUrl && ...)) handles this.
-        console.log(`INFO: DownloadImages: No images were initiated for download from tab ${tab.id}.`);
     }
 }
 
