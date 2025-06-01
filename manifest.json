@@ -9,19 +9,24 @@
     "*://*.bandcamp.com/*",
     "*://f4.bcbits.com/*",
     "clipboardWrite",
-    "downloads" 
+    "downloads",
+    "storage"  
   ],
-  "background": {
+ "background": {
     "scripts": ["background.js"]
   },
-  "icons": {
-  "48": "logo.svg",
-  "96": "logo.svg"
-},
   "browser_action": {
-    "default_icon": "logo.svg",
+    "default_icon": {
+      "48": "logo.svg",
+      "96": "logo.svg"
+    },
     "default_title": "Discography Archive Tools",
     "default_popup": "popup.html"
+  },
+  "icons": {
+    "48": "logo.svg",
+    "96": "logo.svg",
+    "128": "logo.svg"
   },
   "content_scripts": [
     {

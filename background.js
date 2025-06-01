@@ -38,6 +38,114 @@ function getExtensionFromMimeType(mimeType) {
     }
 }
 
+// --- CSS for the page notification toast ---
+const pageNotificationCSS = `
+    #dat-page-notification-toast {
+        position: fixed !important;
+        bottom: 20px !important;
+        right: 20px !important;
+        background-color: #28a745 !important; /* Green for success */
+        color: white !important;
+        padding: 12px 24px !important;
+        border-radius: 6px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+        z-index: 2147483647 !important; /* Max z-index */
+        opacity: 0 !important;
+        visibility: hidden !important;
+        font-family: Arial, sans-serif !important;
+        font-size: 14px !important;
+        line-height: 1.4 !important;
+        transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out, visibility 0s linear 0.4s !important;
+        transform: translateY(20px) !important;
+        text-align: center !important;
+    }
+    #dat-page-notification-toast.show {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: translateY(0) !important;
+        transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out, visibility 0s linear 0s !important;
+    }
+    #dat-page-notification-toast.error {
+        background-color: #dc3545 !important; /* Red for error */
+    }
+`;
+
+let cssInjectedTabs = new Set(); 
+
+async function showPageNotification(tabId, message, status = 'success', duration = 3000) {
+    let targetTabId = tabId;
+    if (!targetTabId) {
+        try {
+            const [activeFallbackTab] = await browser.tabs.query({ active: true, currentWindow: true });
+            if (activeFallbackTab && activeFallbackTab.id) {
+                targetTabId = activeFallbackTab.id;
+                console.log("INFO: showPageNotification: Using active tab as fallback for notification:", targetTabId);
+            } else {
+                console.error("ERROR: showPageNotification: No valid tabId to show notification.");
+                return;
+            }
+        } catch (e) {
+             console.error("ERROR: showPageNotification: Could not query active tab for notification.", e);
+             return;
+        }
+    }
+
+    try {
+        if (!cssInjectedTabs.has(targetTabId)) { 
+            await browser.tabs.insertCSS(targetTabId, { code: pageNotificationCSS });
+            cssInjectedTabs.add(targetTabId);
+            console.log(`INFO: Injected notification CSS into tab ${targetTabId}`);
+        }
+    } catch (e) {
+        console.error(`ERROR: Failed to inject notification CSS into tab ${targetTabId}:`, e);
+    }
+
+    try {
+        const scriptToExecute = `
+            (function(msg, stat, dur) {
+                let toast = document.getElementById('dat-page-notification-toast');
+                if (!toast) {
+                    toast = document.createElement('div');
+                    toast.id = 'dat-page-notification-toast';
+                    if (document.body) { 
+                        document.body.appendChild(toast);
+                    } else {
+                        console.warn('INJECTED_WARN: Document body not found, cannot append toast.');
+                        return;
+                    }
+                }
+                
+                toast.textContent = msg;
+                toast.className = 'dat-page-notification-toast'; 
+                if (stat === 'error') {
+                    toast.classList.add('error');
+                }
+
+                if (toast.showTimeout) clearTimeout(toast.showTimeout);
+                if (toast.hideTimeout) clearTimeout(toast.hideTimeout);
+
+                toast.offsetHeight; 
+
+                requestAnimationFrame(() => {
+                    toast.classList.add('show');
+                });
+
+                toast.showTimeout = setTimeout(() => {
+                    toast.classList.remove('show');
+                    toast.hideTimeout = setTimeout(() => {
+                        if (toast && toast.parentNode && !toast.classList.contains('show')) {
+                            toast.parentNode.removeChild(toast);
+                        }
+                    }, 550); 
+                }, dur);
+            })(${JSON.stringify(message)}, ${JSON.stringify(status)}, ${duration});
+        `;
+        await browser.tabs.executeScript(targetTabId, { code: scriptToExecute });
+    } catch (e) {
+        console.error(`ERROR: Failed to execute notification script in tab ${targetTabId}:`, e);
+    }
+}
+
 // Sort tabs in current window based on classification
 async function sortTabsAcrossWindow() {
   console.log("INFO: SortTabs: Starting function execution...");
@@ -54,6 +162,7 @@ async function sortTabsAcrossWindow() {
     });
   } catch (e) {
     console.error("ERROR: SortTabs: Failed to query tabs:", e);
+    await showPageNotification(null, "Error querying tabs for sorting.", "error");
     return;
   }
   
@@ -64,6 +173,7 @@ async function sortTabsAcrossWindow() {
 
   if (!tabs.length) {
     console.log("INFO: SortTabs: No active Bandcamp album/track tabs found to sort.");
+    await showPageNotification(null, "No Bandcamp tabs found to sort.", "error");
     return;
   }
 
@@ -90,18 +200,34 @@ async function sortTabsAcrossWindow() {
     }
   }
 
-  if (tabs.length > 0) { 
+  let sortPerformed = false;
+  if (tabs.length > 0 && (paidTabs.length > 0 || nypTabs.length > 0) ) { 
     const baseIndex = Math.min(...tabs.map(t => t.index)); 
-
+    let movedCount = 0;
     for (let i = 0; i < paidTabs.length; i++) {
-      await browser.tabs.move(paidTabs[i].id, { index: baseIndex + i });
+      if (paidTabs[i].index !== baseIndex + i) { 
+          await browser.tabs.move(paidTabs[i].id, { index: baseIndex + i });
+          movedCount++;
+      }
     }
     for (let i = 0; i < nypTabs.length; i++) {
-      await browser.tabs.move(nypTabs[i].id, { index: baseIndex + paidTabs.length + i });
+      if (nypTabs[i].index !== baseIndex + paidTabs.length + i) {
+          await browser.tabs.move(nypTabs[i].id, { index: baseIndex + paidTabs.length + i });
+          movedCount++;
+      }
     }
-    console.log("INFO: SortTabs: Bandcamp tabs sorted.");
+    if(movedCount > 0) {
+        sortPerformed = true;
+        console.log("INFO: SortTabs: Bandcamp tabs sorted.");
+    }
   } else {
-    console.log("INFO: SortTabs: No tabs to sort after filtering.");
+    console.log("INFO: SortTabs: No tabs needed sorting or no sortable tabs after classification.");
+  }
+  
+  if (sortPerformed) {
+    await showPageNotification(null, "Bandcamp tabs sorted!", "success");
+  } else if (tabs.length > 0) { 
+    await showPageNotification(null, "Tabs checked, no reordering needed.", "success", 2000);
   }
 }
 
@@ -121,15 +247,24 @@ async function clickDownloadAllNonPaid() {
     });
   } catch (e) {
     console.error("ERROR: ClickDownload: Failed to query tabs:", e);
+    // Attempt to show error on the current active tab if query fails
+    const [activeTabForError] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (activeTabForError && activeTabForError.id) {
+        await showPageNotification(activeTabForError.id, "Error querying tabs for download.", "error");
+    }
     return;
   }
 
   console.log(`INFO: ClickDownload: Initially queried ${initiallyQueriedTabs.length} tabs.`);
-  const activeTabs = initiallyQueriedTabs.filter(tab => isActiveTab(tab, "ClickDownload"));
+  const activeTabs = initiallyQueriedTabs.filter(tab => isActiveTab(tab, "ClickDownload")); // Assumes isActiveTab is defined
   console.log(`INFO: ClickDownload: After filtering, processing ${activeTabs.length} active tabs.`);
 
   if (!activeTabs.length) {
-    console.log("INFO: ClickDownload: No active Bandcamp album/track tabs found for download process.");
+    console.log("INFO: ClickDownload: No active Bandcamp tabs found for download process.");
+    const [activeTabForNotification] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (activeTabForNotification && activeTabForNotification.id) {
+        await showPageNotification(activeTabForNotification.id, "No active Bandcamp tabs for download.", "error");
+    }
     return;
   }
 
@@ -151,10 +286,29 @@ async function clickDownloadAllNonPaid() {
 
   if (!targetTabs.length) {
     console.log("INFO: ClickDownload: No NYP/Free active Bandcamp tabs found to process for download.");
+    const [activeTabForNotification] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (activeTabForNotification && activeTabForNotification.id) {
+        await showPageNotification(activeTabForNotification.id, "No NYP/Free tabs found to process.", "error");
+    }
     return;
   }
   
   console.log(`INFO: ClickDownload: Found ${targetTabs.length} NYP/Free active tabs to process for download.`);
+  // Show initial notification on the current active tab
+  const [currentActiveTabForStartNotification] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (currentActiveTabForStartNotification && currentActiveTabForStartNotification.id) {
+      await showPageNotification(currentActiveTabForStartNotification.id, `Starting download process for ${targetTabs.length} NYP/Free tab(s)...`, "success", 3500);
+  }
+
+  let savedSettings = {};
+  try {
+      savedSettings = await browser.storage.local.get(['email', 'zipcode']);
+      console.log("INFO: ClickDownload: Fetched settings from storage:", savedSettings);
+  } catch (storageError) {
+      console.error("ERROR: ClickDownload: Failed to retrieve settings from storage:", storageError);
+  }
+  const userEmailForInjection = JSON.stringify(savedSettings.email || "");
+  const userZipcodeForInjection = JSON.stringify(savedSettings.zipcode || "");
 
   for (const tab of targetTabs) { 
     try {
@@ -163,8 +317,9 @@ async function clickDownloadAllNonPaid() {
 
       await browser.tabs.executeScript(tab.id, {
         code: `
-          (function(){
+          (function(savedUserEmail, savedUserZipcode){ 
             console.log("INJECTED: Processing download steps for tab: " + ${tabIdForInjection} + " (URL: " + ${tabUrlForInjection} + ")");
+            console.log("INJECTED: Received settings - Email: " + savedUserEmail + ", Zip: " + savedUserZipcode);
 
             const initialDownloadBtn = document.querySelector('button.download-link.buy-link');
             if (initialDownloadBtn) {
@@ -196,19 +351,62 @@ async function clickDownloadAllNonPaid() {
                 }
 
                 setTimeout(() => {
-                  const finalDownloadBtn = document.querySelector('button.download-panel-checkout-button');
-                  if (finalDownloadBtn) {
-                    finalDownloadBtn.click();
-                    console.log("INJECTED: Step 4: Clicked 'Download Now' button in tab " + ${tabIdForInjection});
+                  const emailAddressInput = document.querySelector('input#fan_email_address');
+                  const postalCodeInput = document.querySelector('input#fan_email_postalcode');
+                  let okButtonClicked = false; // Flag to track if "OK" was clicked after email prompt
+
+                  if (emailAddressInput && (getComputedStyle(emailAddressInput).display !== 'none' && emailAddressInput.offsetParent !== null)) {
+                    // Email prompt is visible
+                    console.log("INJECTED_INFO: Email input field is present for tab " + ${tabIdForInjection});
+                    if (savedUserEmail) {
+                        emailAddressInput.value = savedUserEmail;
+                        emailAddressInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        console.log("INJECTED_INFO: Filled email for tab " + ${tabIdForInjection});
+                    }
+                    if (postalCodeInput && savedUserZipcode) {
+                        postalCodeInput.value = savedUserZipcode;
+                        postalCodeInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        console.log("INJECTED_INFO: Filled zip code for tab " + ${tabIdForInjection});
+                    }
+                    
+                    const okButton = Array.from(document.querySelectorAll('button.download-panel-checkout-button')).find(
+                        btn => btn.textContent.trim().toUpperCase() === 'OK' && (getComputedStyle(btn).display !== 'none' && btn.offsetParent !== null)
+                    );
+                    if (okButton) {
+                        console.log("INJECTED_INFO: Clicking 'OK' button for tab " + ${tabIdForInjection});
+                        okButton.click();
+                        okButtonClicked = true; // Set flag indicating "OK" was clicked
+                    } else {
+                        console.log("INJECTED_WARN: Email prompt visible, but 'OK' button not found for tab " + ${tabIdForInjection} + ". Halting for this tab.");
+                        // Halt here, user needs to manually proceed or close.
+                    }
                   } else {
-                    console.log("INJECTED_WARN: Step 4: Could not find 'Download Now' button in tab " + ${tabIdForInjection});
+                    // Email prompt is NOT visible, try to click "Download Now" (or similar non-"OK" button)
+                    console.log("INJECTED_INFO: Email input field NOT found/visible for tab " + ${tabIdForInjection} + ". Looking for 'Download Now' button.");
+                    const finalDownloadBtn = Array.from(document.querySelectorAll('button.download-panel-checkout-button')).find(
+                        btn => btn.textContent.trim().toUpperCase() !== 'OK' && (getComputedStyle(btn).display !== 'none' && btn.offsetParent !== null)
+                    );
+                    if (finalDownloadBtn) {
+                        finalDownloadBtn.click();
+                        console.log("INJECTED: Clicked 'Download Now' button in tab " + ${tabIdForInjection});
+                    } else {
+                        // Fallback if a specific "Download Now" isn't found but any other checkout button is
+                        const anyCheckoutButton = document.querySelector('button.download-panel-checkout-button:not([style*="display:none"]):not([hidden])');
+                         if(anyCheckoutButton) {
+                            console.log("INJECTED_WARN: 'Download Now' not found, found a generic checkout button. Attempting click for tab " + ${tabIdForInjection});
+                            anyCheckoutButton.click();
+                         } else {
+                            console.log("INJECTED_WARN: Could not find 'Download Now' or any other visible checkout button in tab " + ${tabIdForInjection});
+                         }
+                    }
                   }
+                  // If okButtonClicked was true, the process for this tab effectively ended with that click.
+                  // If email prompt wasn't visible, we attempted to click "Download Now".
+                  // If email prompt was visible but "OK" wasn't found, we logged and did nothing further for this tab.
                 }, 700); 
-
               }, 700); 
-
             }, 700); 
-          })();
+          })(${userEmailForInjection}, ${userZipcodeForInjection});
         `
       });
       console.log(`INFO: ClickDownload: Injected multi-step download script into tab ${tab.id}`);
@@ -217,13 +415,26 @@ async function clickDownloadAllNonPaid() {
     }
   }
 
-  console.log("INFO: ClickDownload: Multi-step download process initiated for all targeted NYP/Free active tabs.");
+  // Final notification after iterating through all target tabs
+  console.log("INFO: ClickDownload: Finished iterating through target tabs for download process.");
+  const [finalActiveTabForNotification] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (finalActiveTabForNotification && finalActiveTabForNotification.id) {
+      await showPageNotification(finalActiveTabForNotification.id, `Download process attempted for ${targetTabs.length} tab(s).`, "success", 4500);
+  }
 }
 
 async function copyAllKeywordsToClipboard() {
     console.log("INFO: copyAllKeywordsToClipboard: Starting function execution...");
     let allKeywordsCollected = [];
     let queriedTabs;
+    let notificationTabId = null;
+
+    try {
+        const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.id) {
+            notificationTabId = activeTab.id;
+        }
+    } catch(e) { console.error("ERROR: copyAllKeywordsToClipboard: Could not get active tab for notifications.", e); }
 
     try {
         queriedTabs = await browser.tabs.query({
@@ -235,26 +446,26 @@ async function copyAllKeywordsToClipboard() {
         });
     } catch (e) {
         console.error("ERROR: copyAllKeywordsToClipboard: Failed to query tabs:", e);
-        return;
+        if (notificationTabId) showPageNotification(notificationTabId, "Error querying tabs.", "error");
+        return; 
     }
 
     console.log(`INFO: copyAllKeywordsToClipboard: tabs.query initially returned ${queriedTabs.length} tabs.`);
-    
-    const activeTabs = queriedTabs.filter(tab => isActiveTab(tab, "copyAllKeywordsToClipboard"));
-    
-    console.log(`INFO: copyAllKeywordsToClipboard: After filtering, processing ${activeTabs.length} active, non-discarded tabs.`);
+    const activeTabsToProcess = queriedTabs.filter(tab => isActiveTab(tab, "copyAllKeywordsToClipboard")); 
+    console.log(`INFO: copyAllKeywordsToClipboard: After filtering, processing ${activeTabsToProcess.length} active, non-discarded tabs.`);
 
-    if (activeTabs.length === 0) {
+    if (activeTabsToProcess.length === 0) {
         console.log("INFO: copyAllKeywordsToClipboard: No active, non-discarded matching Bandcamp tabs found.");
-        return;
+        if (notificationTabId) showPageNotification(notificationTabId, "No active Bandcamp tabs found.", "error");
+        return; 
     }
 
-    activeTabs.forEach((t, index) => {
-        console.log(`INFO_VERBOSE: copyAllKeywordsToClipboard: Will process Tab ${index + 1}/${activeTabs.length} - ID: ${t.id}, URL: ${t.url}, Title: ${t.title}, Status: ${t.status}`);
+    activeTabsToProcess.forEach((t, index) => {
+        console.log(`INFO_VERBOSE: copyAllKeywordsToClipboard: Will process Tab ${index + 1}/${activeTabsToProcess.length} - ID: ${t.id}, URL: ${t.url}, Title: ${t.title}, Status: ${t.status}`);
     });
 
-    for (let i = 0; i < activeTabs.length; i++) {
-        const tab = activeTabs[i];
+    for (let i = 0; i < activeTabsToProcess.length; i++) {
+        const tab = activeTabsToProcess[i];
         if (!tab.id) {
             console.warn(`WARN: copyAllKeywordsToClipboard: Active tab ${i + 1} (URL: ${tab.url}) unexpectedly has no ID, skipping.`);
             continue;
@@ -264,7 +475,7 @@ async function copyAllKeywordsToClipboard() {
             continue;
         }
 
-        console.log(`INFO: copyAllKeywordsToClipboard: Attempting to execute script on tab ${i + 1}/${activeTabs.length} - ID: ${tab.id}, URL: ${tab.url}`);
+        console.log(`INFO: copyAllKeywordsToClipboard: Attempting to execute script on tab ${i + 1}/${activeTabsToProcess.length} - ID: ${tab.id}, URL: ${tab.url}`);
         const tabIdForInjection = tab.id; 
 
         try {
@@ -298,17 +509,8 @@ async function copyAllKeywordsToClipboard() {
                 `
             });
 
-            console.log('INFO: copyAllKeywordsToClipboard: Script execution result for tab ' + tab.id + ':', results);
-
-            if (results && results[0] && Array.isArray(results[0])) {
-                if (results[0].length > 0) {
-                    allKeywordsCollected.push(...results[0]);
-                    console.log('INFO: copyAllKeywordsToClipboard: Extracted keywords from tab ' + tab.id + ' (' + tab.title + '):', results[0]);
-                } else {
-                    console.log('INFO: copyAllKeywordsToClipboard: No keywords found in ld+json for tab ' + tab.id + ' (' + tab.title + ').');
-                }
-            } else {
-                 console.log('WARN: copyAllKeywordsToClipboard: Script executed on tab ' + tab.id + ' (' + tab.title + ') but returned no result or unexpected format. Result:', results);
+            if (results && results[0] && Array.isArray(results[0]) && results[0].length > 0) {
+                allKeywordsCollected.push(...results[0]);
             }
         } catch (e) {
             console.error('ERROR: copyAllKeywordsToClipboard: Failed to execute script or process results for tab ' + tab.id + ' (' + tab.title + '):', e.toString(), e.stack);
@@ -319,7 +521,8 @@ async function copyAllKeywordsToClipboard() {
 
     if (allKeywordsCollected.length === 0) {
         console.log("INFO: copyAllKeywordsToClipboard: No keywords were collected from any tabs.");
-        return;
+        if (notificationTabId) showPageNotification(notificationTabId, "No keywords found to copy.", "error");
+        return; 
     }
 
     const uniqueKeywords = Array.from(new Set(allKeywordsCollected.map(kw => kw.toLowerCase().trim()).filter(kw => kw)));
@@ -327,13 +530,22 @@ async function copyAllKeywordsToClipboard() {
 
     if (uniqueKeywords.length === 0) {
         console.log("INFO: copyAllKeywordsToClipboard: After normalization, no valid keywords remain.");
-        return;
+        if (notificationTabId) showPageNotification(notificationTabId, "No valid keywords to copy.", "error");
+        return; 
     }
     
     const formattedKeywords = uniqueKeywords.join('; ');
     console.log("INFO: copyAllKeywordsToClipboard: Formatted keywords string for clipboard:", formattedKeywords);
-
-    await copyTextToClipboard(formattedKeywords); 
+    
+    const copySuccess = await copyTextToClipboard(formattedKeywords); 
+    
+    if (notificationTabId) {
+        if (copySuccess) {
+            showPageNotification(notificationTabId, "Tags copied!", "success");
+        } else {
+            showPageNotification(notificationTabId, "Failed to copy tags.", "error");
+        }
+    }
 }
 
 // Function to copy titles and URLs based on classification type
@@ -341,6 +553,13 @@ async function copyTitlesAndUrls(requestedType) {
     console.log(`INFO: copyTitlesAndUrls: Starting for type "${requestedType}"...`);
     classifications = {}; 
     let outputLines = [];
+    let notificationTabId = null;
+
+    try {
+        const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.id) notificationTabId = activeTab.id;
+    } catch(e) { console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Could not get active tab for notifications.`, e); }
+
 
     let initiallyQueriedTabs;
     try {
@@ -353,6 +572,7 @@ async function copyTitlesAndUrls(requestedType) {
         });
     } catch (e) {
         console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Failed to query tabs:`, e);
+        if (notificationTabId) showPageNotification(notificationTabId, "Error querying tabs.", "error");
         return;
     }
 
@@ -362,13 +582,13 @@ async function copyTitlesAndUrls(requestedType) {
 
     if (!activeTabs.length) {
         console.log(`INFO: copyTitlesAndUrls (${requestedType}): No active Bandcamp tabs found.`);
+        if (notificationTabId) showPageNotification(notificationTabId, "No active Bandcamp tabs found.", "error");
         return;
     }
 
     for (const tab of activeTabs) {
         try {
             await browser.tabs.executeScript(tab.id, { file: "contentScript.js" });
-            console.log(`INFO: copyTitlesAndUrls (${requestedType}): Injected classification script into tab ${tab.id}`);
         } catch (e) {
             console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Failed to inject classification script into tab ${tab.id}:`, e);
         }
@@ -394,19 +614,22 @@ async function copyTitlesAndUrls(requestedType) {
             if (tab.title && tab.url) {
                 outputLines.push(tab.title.trim()); 
                 outputLines.push(tab.url);
-                console.log(`INFO: copyTitlesAndUrls (${requestedType}): Added tab - Title: ${tab.title.trim()}, URL: ${tab.url}`);
-            } else {
-                console.warn(`WARN: copyTitlesAndUrls (${requestedType}): Tab ID ${tab.id} missing title or URL. Title: ${tab.title}, URL: ${tab.url}`);
             }
         }
     }
 
     if (outputLines.length > 0) {
         const outputString = outputLines.join('\n');
-        console.log(`INFO: copyTitlesAndUrls (${requestedType}): Final string for clipboard:\n${outputString}`);
-        await copyTextToClipboard(outputString);
+        const copySuccess = await copyTextToClipboard(outputString);
+        if (notificationTabId) {
+            const typeString = requestedType === 'nypFree' ? 'NYP/Free' : 'Paid';
+            showPageNotification(notificationTabId, 
+                copySuccess ? `${typeString} info copied!` : `Failed to copy ${typeString} info.`,
+                copySuccess ? "success" : "error");
+        }
     } else {
         console.log(`INFO: copyTitlesAndUrls (${requestedType}): No tabs matched the type "${requestedType}" or no data to copy.`);
+        if (notificationTabId) showPageNotification(notificationTabId, `No ${requestedType === 'nypFree' ? 'NYP/Free' : 'Paid'} info found to copy.`, "error");
     }
 }
 
@@ -531,6 +754,7 @@ async function downloadImagePair(baseName, imageUrl, tabOrigin) {
 async function downloadBandcampPageImage(tab) {
     if (!tab || !tab.id) {
         console.error("ERROR: DownloadImages: Invalid tab object provided.");
+        await showPageNotification(null, "Error: No valid tab for image download.", "error");
         return;
     }
     
@@ -559,11 +783,13 @@ async function downloadBandcampPageImage(tab) {
     }
 
     if (!isValidPageType) {
-        console.log(`INFO: DownloadImages: Tab ${tab.id} (${tabUrl}) is not a targeted Bandcamp page (specific artist page, /music, album, or track).`);
+        console.log(`INFO: DownloadImages: Tab ${tab.id} (${tabUrl}) is not a targeted Bandcamp page.`);
+        await showPageNotification(tab.id, "Not a Bandcamp page for image download.", "error");
         return;
     }
 
     console.log(`INFO: DownloadImages: Processing tab ID ${tab.id}, URL: ${tabUrl}`);
+    // Initial notification moved to after image URL extraction
 
     let imageUrls;
     try {
@@ -571,34 +797,75 @@ async function downloadBandcampPageImage(tab) {
         const results = await browser.tabs.executeScript(tab.id, {
             code: `
                 (function() {
-                    const data = { popupImageUrl: null, customHeaderUrl: null, backgroundImageUrl: null };
-
-                    // 1. Artist Image
+                    let data = { popupImageUrl: null, customHeaderUrl: null, backgroundImageUrl: null };
+                    
+                    // 1. Popup Image (Main Art / Bio Pic)
                     const popupLink = document.querySelector('a.popupImage');
-                    if (popupLink?.href) {
+                    if (popupLink && popupLink.href) {
                         data.popupImageUrl = popupLink.href;
-                    } else {
+                    } else { 
                         const bioPicImg = document.querySelector('#bio-container .popupImage img, .band-photo');
-                        if (bioPicImg?.src) data.popupImageUrl = bioPicImg.src;
+                        if (bioPicImg && bioPicImg.src) data.popupImageUrl = bioPicImg.src;
                     }
-
-                    // 2. Custom Header
-                    const headerImg = document.querySelector('#customHeader img');
-                    if (headerImg?.src) {
-                        data.customHeaderUrl = headerImg.src;
-                    }
-
-                    // 3. Background Image
-                    const styleTag = document.querySelector('style#custom-design-rules-style');
-                    if (styleTag?.textContent) {
-                        const cssText = styleTag.textContent;
-                        const bgImageRegex = /background-image:\\s*url\\((['"]?)(.*?)\\1\\)/i;
-                        const match = cssText.match(bgImageRegex);
-                        if (match && match[2]) {
-                            data.backgroundImageUrl = match[2];
+                    
+                    // 2. Custom Header Image
+                    const customHeaderWrapper = document.querySelector('div#customHeader');
+                    if (customHeaderWrapper) {
+                        const headerLinkAnchor = customHeaderWrapper.querySelector('a[href="/"][referrerpolicy="strict-origin-when-cross-origin"]');
+                        if (headerLinkAnchor) {
+                            const headerImg = headerLinkAnchor.querySelector('img');
+                            if (headerImg && headerImg.src) data.customHeaderUrl = headerImg.src;
+                        } else { 
+                            const directHeaderImg = customHeaderWrapper.querySelector('img');
+                            if(directHeaderImg && directHeaderImg.src) {
+                                const parentAnchor = directHeaderImg.closest('a');
+                                if (parentAnchor && parentAnchor.getAttribute('href') === '/') data.customHeaderUrl = directHeaderImg.src;
+                            }
                         }
                     }
 
+                    // 3. Background Image from inline style tag
+                    const styleTag = document.querySelector('style#custom-design-rules-style');
+                    if (styleTag && styleTag.textContent) {
+                        const cssText = styleTag.textContent;
+                        let bgUrl = null;
+                        let match;
+                        
+                        // Attempt to find the body rule content first
+                        const bodyRuleRegex = /body\s*\{([\s\S]*?)\}/i; 
+                        const bodyMatch = cssText.match(bodyRuleRegex);
+
+                        if (bodyMatch && bodyMatch[1]) {
+                            const bodyCssProperties = bodyMatch[1];
+
+                            // Try to match url("...")
+                            match = bodyCssProperties.match(/background-image\s*:\s*url\(\s*"([^"]*)"\s*\)/i);
+                            if (match && match[1]) {
+                                bgUrl = match[1].trim();
+                            } else {
+                                // Try to match url('...')
+                                match = bodyCssProperties.match(/background-image\s*:\s*url\(\s*'([^']*)'\s*\)/i);
+                                if (match && match[1]) {
+                                    bgUrl = match[1].trim();
+                                } else {
+                                    // Try to match url(...) without quotes
+                                    match = bodyCssProperties.match(/background-image\s*:\s*url\(\s*([^"'\)\s][^\)\s]*)\s*\)/i);
+                                    if (match && match[1]) {
+                                        bgUrl = match[1].trim();
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (bgUrl) {
+                            data.backgroundImageUrl = bgUrl;
+                            console.log('INJECTED_SCRIPT_INFO: Found background image URL in style tag:', bgUrl);
+                        } else {
+                            console.log('INJECTED_SCRIPT_INFO: No background image URL found in style#custom-design-rules-style with multi-step regex.');
+                        }
+                    } else {
+                        console.log('INJECTED_SCRIPT_INFO: style#custom-design-rules-style tag not found or has no content.');
+                    }
                     return data;
                 })();
             `
@@ -608,184 +875,117 @@ async function downloadBandcampPageImage(tab) {
         }
     } catch (e) {
         console.error(`ERROR: DownloadImages: Failed to execute script on tab ${tab.id} to get image URLs:`, e);
+        await showPageNotification(tab.id, "Error getting image URLs from page.", "error");
         return;
     }
 
     if (!imageUrls || (!imageUrls.popupImageUrl && !imageUrls.customHeaderUrl && !imageUrls.backgroundImageUrl)) {
         console.log(`INFO: DownloadImages: No target images (Artist, Header, or Background) found on tab ${tab.id} (${tabUrl}).`);
-        if (!imageUrls.popupImageUrl && !imageUrls.customHeaderUrl && !imageUrls.backgroundImageUrl) {
-             return;
-        }
+        await showPageNotification(tab.id, "No target images found on this page.", "error");
+        return;
     }
-
+    
+    await showPageNotification(tab.id, "Initiating image downloads...", "success", 2000);
     const tabOrigin = new URL(tabUrl).origin;
+    let downloadsInitiatedCount = 0;
 
     if (imageUrls.popupImageUrl) {
         await downloadImagePair("Artist Image", imageUrls.popupImageUrl, tabOrigin);
+        downloadsInitiatedCount++;
     } else {
         console.log("INFO: DownloadImages: No 'Artist Image' found to download.");
     }
 
     if (imageUrls.customHeaderUrl) {
         await downloadImagePair("Custom Header", imageUrls.customHeaderUrl, tabOrigin);
+        downloadsInitiatedCount++;
     } else {
         console.log("INFO: DownloadImages: No 'Custom Header' image found to download.");
     }
     
     if (imageUrls.backgroundImageUrl) {
         await downloadImagePair("Background Image", imageUrls.backgroundImageUrl, tabOrigin);
+        downloadsInitiatedCount++;
     } else {
         console.log("INFO: DownloadImages: No 'Background Image' from style tag found to download.");
+        // If this was the only potential image, downloadsInitiatedCount would be 0.
+        // Only show error if NOTHING was attempted.
+        if(downloadsInitiatedCount === 0 && !imageUrls.popupImageUrl && !imageUrls.customHeaderUrl) {
+           await showPageNotification(tab.id, "No background image URL extracted.", "error");
+        }
+    }
+
+    if (downloadsInitiatedCount === 0) {
+        // This case is mostly covered if all individual imageUrls were null.
+        // The initial check for (!imageUrls || (!imageUrls.popupImageUrl && ...)) handles this.
+        console.log(`INFO: DownloadImages: No images were initiated for download from tab ${tab.id}.`);
     }
 }
 
 
-async function copyTextToClipboard(text) {
-    try {
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-            await navigator.clipboard.writeText(text);
-            console.log('SUCCESS: Text successfully copied to clipboard using navigator.clipboard!');
-            return; 
-        }
-    } catch (err) {
-        console.warn('WARN: navigator.clipboard.writeText failed. This might be due to permissions (requires "clipboardWrite" in manifest) or browser context. Falling back. Error:', err);
-    }
-
-    console.log('INFO: Attempting to copy text to clipboard using document.execCommand fallback.');
-    const bgPage = browser.extension.getBackgroundPage(); 
-    if (!bgPage || !bgPage.document || !bgPage.document.body) {
-        console.error("ERROR: Background page document context not available for execCommand fallback.");
-        return;
-    }
-
-    const textarea = bgPage.document.createElement('textarea');
-    textarea.style.position = 'fixed'; 
-    textarea.style.top = '-9999px';   
-    textarea.style.left = '-9999px';
-    textarea.value = text;
-
-    bgPage.document.body.appendChild(textarea);
-    textarea.focus(); 
-    textarea.select(); 
-
-    try {
-        const successful = bgPage.document.execCommand('copy');
-        if (successful) {
-            console.log('SUCCESS: Text successfully copied to clipboard using execCommand!');
-        } else {
-            console.error('ERROR: document.execCommand("copy") was not successful. The clipboard API might be blocked or the document might not be focused.');
-        }
-    } catch (err) {
-        console.error('ERROR: Error during document.execCommand("copy"):', err);
-    } finally {
-        if (textarea.parentNode === bgPage.document.body) { 
-            bgPage.document.body.removeChild(textarea); 
-        }
-    }
+async function copyTextToClipboard(text) { 
+    try { if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') { await navigator.clipboard.writeText(text); console.log('SUCCESS: Text successfully copied to clipboard using navigator.clipboard!'); return true; } } catch (err) { console.warn('WARN: navigator.clipboard.writeText failed, trying fallback:', err); }
+    console.log('INFO: Attempting to copy to clipboard using document.execCommand fallback.');
+    const bgPage = browser.extension.getBackgroundPage(); if (!bgPage || !bgPage.document || !bgPage.document.body) { console.error("ERROR: Background page document context not available for execCommand fallback."); return false; }
+    const textarea = bgPage.document.createElement('textarea'); textarea.style.position = 'fixed'; textarea.style.top = '-9999px'; textarea.style.left = '-9999px'; textarea.value = text;
+    bgPage.document.body.appendChild(textarea); textarea.focus(); textarea.select(); let successful = false;
+    try { successful = bgPage.document.execCommand('copy'); if (successful) { console.log('SUCCESS: Text successfully copied to clipboard using execCommand!'); } else { console.error('ERROR: document.execCommand("copy") was not successful.'); } } catch (err) { console.error('ERROR: Error during document.execCommand("copy"):', err); successful = false; } finally { if (textarea.parentNode === bgPage.document.body) { bgPage.document.body.removeChild(textarea); } }
+    return successful;
 }
 
 browser.runtime.onInstalled.addListener(() => {
   console.log("INFO: background.js: onInstalled listener triggered. Attempting to create context menus.");
   try {
-    browser.contextMenus.create({
-      id: "bandcamp-tools",
-      title: "Bandcamp Tools",
-      contexts: ["page", "image"], 
-      documentUrlPatterns: ["*://*.bandcamp.com/*"] 
-    });
-
-    browser.contextMenus.create({
-      id: "sort-tabs",
-      parentId: "bandcamp-tools",
-      title: "Sort Tabs (Paid Left, Free Right)",
-      contexts: ["page"],
-      documentUrlPatterns: ["*://*.bandcamp.com/*"]
-    });
-
-    browser.contextMenus.create({
-      id: "click-download",
-      parentId: "bandcamp-tools",
-      title: "Download (NYP/Free)", 
-      contexts: ["page"],
-      documentUrlPatterns: ["*://*.bandcamp.com/*"]
-    });
-
-    browser.contextMenus.create({
-      id: "copy-keywords",
-      parentId: "bandcamp-tools",
-      title: "Copy All Tags",
-      contexts: ["page"],
-      documentUrlPatterns: ["*://*.bandcamp.com/*"] 
-    });
-
-    browser.contextMenus.create({
-      id: "copy-nyp-titles-urls",
-      parentId: "bandcamp-tools",
-      title: "Copy NYP/Free Titles & URLs",
-      contexts: ["page"],
-      documentUrlPatterns: ["*://*.bandcamp.com/*"]
-    });
-
-    browser.contextMenus.create({
-      id: "copy-paid-titles-urls",
-      parentId: "bandcamp-tools",
-      title: "Copy Paid Titles & URLs",
-      contexts: ["page"],
-      documentUrlPatterns: ["*://*.bandcamp.com/*"]
-    });
-
-    browser.contextMenus.create({
-      id: "download-images",
-      parentId: "bandcamp-tools",
-      title: "Download Images (Artist, Header, Background)", 
-      contexts: ["page", "image"], 
-      documentUrlPatterns: [ 
-          "*://*.bandcamp.com/album/*",
-          "*://*.bandcamp.com/track/*",
-          "*://*.bandcamp.com/music",
-          "*://*.bandcamp.com/music?*",
-          "*://*.bandcamp.com/" 
-      ]
-    });
-
+    browser.contextMenus.create({ id: "bandcamp-tools", title: "Bandcamp Tools", contexts: ["page", "image"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
+    browser.contextMenus.create({ id: "sort-tabs", parentId: "bandcamp-tools", title: "Sort Tabs (Paid Left, Free Right)", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
+    browser.contextMenus.create({ id: "click-download", parentId: "bandcamp-tools", title: "Download (NYP/Free)", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
+    browser.contextMenus.create({ id: "copy-keywords", parentId: "bandcamp-tools", title: "Copy Tags", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
+    browser.contextMenus.create({ id: "copy-nyp-titles-urls", parentId: "bandcamp-tools", title: "Copy NYP/Free Titles & URLs", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
+    browser.contextMenus.create({ id: "copy-paid-titles-urls", parentId: "bandcamp-tools", title: "Copy Paid Titles & URLs", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
+    browser.contextMenus.create({ id: "download-images", parentId: "bandcamp-tools", title: "Download Images (Artist, Header, BG)", contexts: ["page", "image"], documentUrlPatterns: [ "*://*.bandcamp.com/album/*", "*://*.bandcamp.com/track/*", "*://*.bandcamp.com/music", "*://*.bandcamp.com/music?*", "*://*.bandcamp.com/" ] });
     console.log("INFO: background.js: All context menus registration attempt complete.");
-  } catch (e) {
-    console.error("ERROR: background.js: Major failure during context menu creation in onInstalled:", e);
-  }
+  } catch (e) { console.error("ERROR: background.js: Major failure during context menu creation in onInstalled:", e); }
 });
 
-browser.contextMenus.onClicked.addListener((info, tab) => {
+browser.contextMenus.onClicked.addListener(async (info, tab) => { 
   console.log(`INFO: Context menu item clicked: ${info.menuItemId}`);
   let targetTab = tab;
 
+  async function getTargetTabForNotification(currentContextTab) {
+      if (currentContextTab && currentContextTab.id && isActiveTab(currentContextTab, "ContextMenuAction")) {
+          return currentContextTab;
+      }
+      const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (activeTab && activeTab.id && isActiveTab(activeTab, "ContextMenuActionFallback")) {
+          return activeTab;
+      }
+      return null;
+  }
+
+  let notificationTab = await getTargetTabForNotification(targetTab);
+
   switch (info.menuItemId) {
     case "sort-tabs":
-      sortTabsAcrossWindow();
+      await sortTabsAcrossWindow(); 
       break;
     case "click-download":
-      clickDownloadAllNonPaid();
+      await clickDownloadAllNonPaid(); 
       break;
     case "copy-keywords":
-      copyAllKeywordsToClipboard();
+      await copyAllKeywordsToClipboard(); 
       break;
     case "copy-nyp-titles-urls":
-      copyTitlesAndUrls('nypFree');
+      await copyTitlesAndUrls('nypFree'); 
       break;
     case "copy-paid-titles-urls":
-      copyTitlesAndUrls('paid');
+      await copyTitlesAndUrls('paid'); 
       break;
     case "download-images":
-      if (targetTab && targetTab.id && isActiveTab(targetTab, "DownloadImagesContext")) {
-          downloadBandcampPageImage(targetTab);
+      if (notificationTab) { 
+          downloadBandcampPageImage(notificationTab); 
       } else {
-          console.warn(`WARN: DownloadImages (Context Menu): Problem with initial tab from context. Info:`, info, `Tab:`, targetTab, `Falling back to active tab.`);
-          browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
-                if (tabs.length > 0 && tabs[0].id && isActiveTab(tabs[0], "DownloadImagesContextFallback")) {
-                    downloadBandcampPageImage(tabs[0]);
-                } else {
-                    console.log("INFO: DownloadImages (Context Menu Fallback): No suitable active tab found or it's not a valid Bandcamp page.");
-                }
-            }).catch(err => console.error("ERROR: DownloadImages (Context Menu Fallback): Error querying active tab:", err));
+          console.log("INFO: DownloadImages (Context Menu): No suitable tab found for image download.");
+          showPageNotification(null, "No suitable Bandcamp tab found.", "error");
       }
       break;
     default:
@@ -796,40 +996,37 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'classification' && sender.tab?.id != null) {
         classifications[sender.tab.id] = message.value;
-        console.log(`INFO: Classification received from tab ${sender.tab.id}: ${message.value}`);
     } 
     else if (message.action) {
         console.log(`INFO: Action received from popup: ${message.action}`);
-        let activeTabPromise;
         switch (message.action) {
             case "sortTabs":
-                sortTabsAcrossWindow();
+                sortTabsAcrossWindow(); 
                 break;
             case "clickDownload":
-                clickDownloadAllNonPaid();
+                clickDownloadAllNonPaid(); 
                 break;
             case "copyKeywords":
-                copyAllKeywordsToClipboard();
+                copyAllKeywordsToClipboard(); 
                 break;
             case "copyNypTitlesUrls":
-                copyTitlesAndUrls('nypFree');
+                copyTitlesAndUrls('nypFree'); 
                 break;
             case "copyPaidTitlesUrls":
-                copyTitlesAndUrls('paid');
+                copyTitlesAndUrls('paid'); 
                 break;
             case "downloadImages":
-                activeTabPromise = browser.tabs.query({ active: true, currentWindow: true });
-                activeTabPromise.then(tabs => {
-                    if (tabs.length > 0 && tabs[0].id) {
-                         if (isActiveTab(tabs[0], "DownloadImagesPopup")) {
-                            downloadBandcampPageImage(tabs[0]);
-                        } else {
-                            console.log("INFO: DownloadImages (Popup): Active tab is hidden/discarded or not a valid Bandcamp page.");
-                        }
+                browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+                    if (tabs.length > 0 && tabs[0].id && isActiveTab(tabs[0], "DownloadImagesPopup")) {
+                        downloadBandcampPageImage(tabs[0]); 
                     } else {
-                        console.log("INFO: DownloadImages (Popup): No active tab found or active tab has no ID.");
+                        console.log("INFO: DownloadImages (Popup): No suitable active tab found.");
+                        showPageNotification(null, "No active Bandcamp tab found.", "error");
                     }
-                }).catch(err => console.error("ERROR: DownloadImages (Popup): Error querying active tab:", err));
+                }).catch(err => {
+                     console.error("ERROR: DownloadImages (Popup): Error querying active tab:", err);
+                     showPageNotification(null, "Error finding active tab.", "error");
+                });
                 break;
             default:
                 console.warn(`WARN: Unknown action received from popup: ${message.action}`);

@@ -6,14 +6,36 @@
     <link rel="stylesheet" type="text/css" href="popup.css">
 </head>
 <body>
-    <ul id="popup-menu">
-        <li><button id="sortTabsBtn">Sort Tabs</button></li>
-        <li><button id="clickDownloadBtn">Download NYP/Free</button></li>
-        <li><button id="copyKeywordsBtn">Copy All Tags</button></li>
-        <li><button id="copyNypTitlesUrlsBtn">Copy NYP/Free Titles & URLs</button></li>
-        <li><button id="copyPaidTitlesUrlsBtn">Copy Paid Titles & URLs</button></li>
-        <li><button id="downloadImagesBtn">Download Images</button></li>
-    </ul>
+    <div class="popup-container">
+        <div id="optionsIconContainer">
+            <button id="toggleOptionsBtn" title="Settings">⚙️</button>
+        </div>
+
+        <div id="mainMenuSection" class="active-section">
+            <ul id="popup-menu">
+                <li><button id="sortTabsBtn">Sort Tabs</button></li>
+                <li><button id="clickDownloadBtn">Download NYP/Free</button></li>
+                <li><button id="copyKeywordsBtn">Copy Tags</button></li>
+                <li><button id="copyNypTitlesUrlsBtn">Copy NYP/Free Titles & URLs</button></li>
+                <li><button id="copyPaidTitlesUrlsBtn">Copy Paid Titles & URLs</button></li>
+                <li><button id="downloadImagesBtn">Download Images</button></li>
+            </ul>
+        </div>
+
+        <div id="optionsSection" class="hidden-section">
+            <h3>Settings</h3>
+            <div class="option-item">
+                <label for="emailInput">Email (for download):</label>
+                <input type="email" id="emailInput" placeholder="your.email@example.com">
+            </div>
+            <div class="option-item">
+                <label for="zipcodeInput">Zip Code (for download):</label>
+                <input type="text" id="zipcodeInput" placeholder="e.g., 90210">
+            </div>
+            <button id="saveSettingsBtn">Save Settings</button>
+            <p id="statusMessage"></p>
+        </div>
+    </div>
     <script src="popup.js"></script>
 </body>
 </html>

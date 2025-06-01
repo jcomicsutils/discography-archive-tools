@@ -1,12 +1,44 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-    margin: 0; /* Remove default margin */
-    padding: 10px; /* Add some padding around the body */
-    min-width: 250px; /* Adjust as needed, slightly wider for better text display */
-    background-color: #282c34; /* Dark background color */
-    color: #abb2bf; /* Default light grey text for any general text */
+    margin: 0; 
+    background-color: #282c34; 
+    color: #abb2bf; 
+    min-width: 260px; /* Ensures enough width for content */
 }
 
+.popup-container {
+    position: relative; 
+    padding: 15px; /* Overall padding for the popup content */
+    /* Add extra padding at the bottom to make space for the icon, 
+       if the icon is large or lists are long. */
+    padding-bottom: 45px; /* Adjust this value as needed */
+}
+
+#optionsIconContainer {
+    position: absolute;
+    bottom: 10px;  /* Distance from the bottom of .popup-container */
+    right: 10px;   /* Distance from the right of .popup-container */
+    z-index: 10;   /* Keep it on top of other flow content */
+}
+
+#toggleOptionsBtn {
+    background: none;
+    border: 1px solid transparent; /* Make border transparent initially */
+    color: #7a828e; /* Slightly muted cog color */
+    font-size: 20px; 
+    padding: 5px; 
+    cursor: pointer;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+
+#toggleOptionsBtn:hover {
+    color: #61afef; /* Accent color on hover */
+    border-color: #4a4f5b; /* Subtle border on hover */
+}
+
+/* Main Menu List */
 ul#popup-menu {
     list-style-type: none;
     margin: 0;
@@ -14,35 +46,112 @@ ul#popup-menu {
 }
 
 ul#popup-menu li {
-    margin-bottom: 8px; /* Spacing between buttons */
+    margin-bottom: 8px; 
 }
 
 ul#popup-menu li:last-child {
-    margin-bottom: 0; /* No margin for the last button in the list */
+    margin-bottom: 0; 
 }
 
-ul#popup-menu button {
-    width: 100%; /* Full width buttons */
-    padding: 12px 15px; /* Comfortable padding */
+ul#popup-menu button, #optionsSection button#saveSettingsBtn {
+    width: 100%; 
+    padding: 10px 12px; 
     font-size: 14px;
-    text-align: left; /* Align text to the left */
-    color: #e0e0e0; /* Light text color for buttons */
-    background-color: #3a3f4b; /* Button background - a bit lighter than body */
-    border: 1px solid #4a4f5b; /* Subtle border for definition */
-    border-radius: 5px; /* Slightly rounded corners */
+    text-align: left; 
+    color: #e0e0e0; 
+    background-color: #3a3f4b; 
+    border: 1px solid #4a4f5b; 
+    border-radius: 5px; 
     cursor: pointer;
     transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-    box-sizing: border-box; /* Ensures padding and border don't add to the width */
-    outline: none; /* Remove default focus outline if desired, or style it */
+    box-sizing: border-box; 
+    outline: none; 
 }
 
-ul#popup-menu button:hover {
-    background-color: #4f5563; /* Lighter background on hover */
-    border-color: #6f7583; /* Lighter border on hover */
+ul#popup-menu button:hover, #optionsSection button#saveSettingsBtn:hover {
+    background-color: #4f5563; 
+    border-color: #6f7583;
 }
 
-ul#popup-menu button:active {
-    background-color: #2c3038; /* Darker background when clicked/active */
-    border-color: #3a3f4b; /* Darker border when clicked/active */
-    transform: translateY(1px); /* Subtle press down effect */
+ul#popup-menu button:active, #optionsSection button#saveSettingsBtn:active {
+    background-color: #2c3038; 
+    border-color: #3a3f4b;
+    transform: translateY(1px); 
+}
+
+/* Options Section Styling */
+#optionsSection {
+    padding-top: 10px; 
+}
+
+#optionsSection h3 {
+    color: #61afef; 
+    margin-top: 0;
+    margin-bottom: 15px;
+    text-align: center;
+    font-size: 16px;
+    border-bottom: 1px solid #4a4f5b;
+    padding-bottom: 8px;
+}
+
+.option-item {
+    margin-bottom: 12px;
+}
+
+.option-item label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 13px;
+    color: #abb2bf;
+}
+
+.option-item input[type="email"],
+.option-item input[type="text"] {
+    width: calc(100% - 22px); 
+    padding: 8px 10px;
+    background-color: #21252b; 
+    border: 1px solid #4a4f5b;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: 14px;
+}
+
+#optionsSection button#saveSettingsBtn {
+    margin-top: 15px;
+    background-color: #61afef; 
+    border-color: #61afef;
+    color: #282c34; 
+    font-weight: bold;
+}
+
+#optionsSection button#saveSettingsBtn:hover {
+    background-color: #529bcf;
+    border-color: #529bcf;
+}
+
+
+#statusMessage {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 12px;
+    min-height: 15px; 
+}
+#statusMessage.success { color: #98c379; }
+#statusMessage.error { color: #e06c75; }
+
+
+/* Visibility Toggling */
+.hidden-section {
+    display: none;
+}
+.active-section {
+    display: block;
+}
+
+/* Ensure option section elements don't get hidden by mistake */
+#optionsSection.active-section {
+    display: block;
+}
+#mainMenuSection.active-section {
+    display: block;
 }

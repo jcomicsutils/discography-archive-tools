@@ -9,12 +9,21 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
     * A **Popup Menu**: Click the "Discography Archive Tools" icon in your browser toolbar.
     * A **Context Menu**: Right-click on any Bandcamp page and find options under "Bandcamp Tools."
 
+* **In-Popup Options Panel**:
+    * Easily configure your email address and zip code via a settings panel directly within the popup menu.
+    * These saved settings are then used by the "Automated Download" feature to help fill in required fields for some albums.
+
+* **Smart Tab Handling**: All operations that iterate through tabs (sorting, data copying, etc.) ignore hidden or discarded tabs to ensure stability and process only active, relevant pages.
+
+* **On-Page Notifications**:
+    * Receive brief, auto-fading notifications directly on your current Bandcamp page (typically in the bottom-right corner) for feedback on actions like "Tabs Sorted!" or "Tags Copied!".
+
 * **Sort Bandcamp Tabs**: Automatically sorts your open Bandcamp album/track tabs in the current window, placing "Paid" items to the left and "Name Your Price" (NYP) / "Free" items to the right.
 
 * **Automated Download for NYP/Free Items**: For tabs identified as NYP or Free, this feature streamlines the download process:
-    * Clicks the initial download/purchase button.
+    * Clicks the initial download button.
     * Automatically sets the price to "0" for "Name Your Price" items.
-    * Proceeding through subsequent confirmation steps. If the download requires an email address you'll need to do this step manually.
+    * Proceeding through subsequent confirmation steps. If an email address and zip code is required during the download process, the extension will automatically fill these fields using the values you've saved in the options panel.
     * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) extension is recommended for downloading everything at once.
 
 * **Download Page Images**: From the active Bandcamp page, this feature attempts to download up to three key images:
@@ -29,8 +38,6 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 * **Copy NYP/Free Titles & URLs**: Identifies all active Bandcamp tabs classified as NYP or Free, then collects their page titles and URLs. This information is formatted as a list (title on one line, URL on the next, then the next title, etc.) and copied to your clipboard.
 
 * **Copy Paid Titles & URLs**: Similar to the above, but specifically targets tabs classified as "Paid," collecting and formatting their titles and URLs for clipboard copying.
-
-* **Smart Tab Handling**: All operations that iterate through tabs (sorting, data copying, etc.) ignore hidden or discarded tabs to ensure stability and process only active, relevant pages.
 
 ## How to Use
 
