@@ -27,7 +27,7 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
     * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) extension is recommended for downloading everything at once.
 
 * **Download Page Images**: From the active Bandcamp page, this feature attempts to download up to three key images:
-    * **Artist/Album Art**: The primary artwork or artist photo (typically from `a.popupImage` or identified fallbacks). Saved as `Artist Image.{original_extension}`.
+    * **Artist Image**: The artist photo (typically from `a.popupImage` or identified fallbacks). Saved as `Artist Image.{original_extension}`.
     * **Custom Header**: The banner image usually found at the top of artist pages. Saved as `Custom Header.{original_extension}`.
     * **Page Background**: The full-page background image defined in the page's custom styles. Saved as `Background Image.{original_extension}`.
     * For each of these images, it also attempts to download a higher-resolution or original version (often a `_0` variant), saved with an `_orig` suffix and an automatically detected file extension (e.g., `Artist Image_orig.png`).
