@@ -754,11 +754,13 @@ async function downloadImagePair(baseName, imageUrl, tabOrigin) {
 async function downloadBandcampPageImage(tab) {
     if (!tab || !tab.id) {
         console.error("ERROR: DownloadImages: Invalid tab object provided.");
+        // Cannot show page notification without a tab.id; main function should ensure 'tab' is valid.
         return;
     }
     
     const tabUrl = tab.url;
     let isValidPageType = false;
+    // Using your existing URL validation logic
     if (tabUrl) {
         const mainPagePattern = /^https?:\/\/[^/.]+\.bandcamp\.com\/?(?:[?#]|$)/;
         const musicPagePattern = /^https?:\/\/[^/.]+\.bandcamp\.com\/music(?:[?#]|$)/; 
@@ -770,11 +772,11 @@ async function downloadBandcampPageImage(tab) {
                 tabUrl.includes("/discover") || tabUrl.includes("/feed") || 
                 tabUrl.includes("/tags") || tabUrl.includes("/artists") ||
                 (mainPagePattern.test(tabUrl) && (tabUrl.includes("/followers") || tabUrl.includes("/following")))) {
-                 isValidPageType = false;
-                 if (albumPagePattern.test(tabUrl) || trackPagePattern.test(tabUrl) || musicPagePattern.test(tabUrl) || 
-                     (mainPagePattern.test(tabUrl) && !tabUrl.match(/^https?:\/\/bandcamp\.com\//) && !tabUrl.includes("/followers") && !tabUrl.includes("/following"))) {
-                     isValidPageType = true; 
-                 }
+                isValidPageType = false;
+                if (albumPagePattern.test(tabUrl) || trackPagePattern.test(tabUrl) || musicPagePattern.test(tabUrl) || 
+                    (mainPagePattern.test(tabUrl) && !tabUrl.match(/^https?:\/\/bandcamp\.com\//) && !tabUrl.includes("/followers") && !tabUrl.includes("/following"))) {
+                    isValidPageType = true; 
+                }
             } else {
                 isValidPageType = true;
             }
@@ -783,20 +785,22 @@ async function downloadBandcampPageImage(tab) {
 
     if (!isValidPageType) {
         console.log(`INFO: DownloadImages: Tab ${tab.id} (${tabUrl}) is not a targeted Bandcamp page (specific artist page, /music, album, or track).`);
+        await showPageNotification(tab.id, "Not a suitable page for image download.", "error");
         return;
     }
 
     console.log(`INFO: DownloadImages: Processing tab ID ${tab.id}, URL: ${tabUrl}`);
+    await showPageNotification(tab.id, "Scanning page for images...", "success", 2000); // Initial notification
 
     let imageUrls;
     try {
-        const tabIdForInjection = tab.id; 
+        const tabIdForInjection = tab.id; // Not strictly needed inside code string if not used there
         const results = await browser.tabs.executeScript(tab.id, {
             code: `
                 (function() {
                     const data = { popupImageUrl: null, customHeaderUrl: null, backgroundImageUrl: null };
 
-                    // 1. Artist Image
+                    // 1. Artist Image (using your selectors with optional chaining)
                     const popupLink = document.querySelector('a.popupImage');
                     if (popupLink?.href) {
                         data.popupImageUrl = popupLink.href;
@@ -805,23 +809,28 @@ async function downloadBandcampPageImage(tab) {
                         if (bioPicImg?.src) data.popupImageUrl = bioPicImg.src;
                     }
 
-                    // 2. Custom Header
+                    // 2. Custom Header (using your selector)
                     const headerImg = document.querySelector('#customHeader img');
                     if (headerImg?.src) {
                         data.customHeaderUrl = headerImg.src;
                     }
 
-                    // 3. Background Image
+                    // 3. Background Image (using your regex)
                     const styleTag = document.querySelector('style#custom-design-rules-style');
                     if (styleTag?.textContent) {
                         const cssText = styleTag.textContent;
+                        // Your regex for background-image: (escaped for JS string)
                         const bgImageRegex = /background-image:\\s*url\\((['"]?)(.*?)\\1\\)/i;
                         const match = cssText.match(bgImageRegex);
                         if (match && match[2]) {
-                            data.backgroundImageUrl = match[2];
+                            data.backgroundImageUrl = match[2].trim(); // Added .trim() for safety
+                            console.log('INJECTED_SCRIPT_INFO: Found background image URL:', data.backgroundImageUrl);
+                        } else {
+                            console.log('INJECTED_SCRIPT_INFO: No background image URL found with your regex.');
                         }
+                    } else {
+                        console.log('INJECTED_SCRIPT_INFO: style#custom-design-rules-style tag not found or has no content.');
                     }
-
                     return data;
                 })();
             `
@@ -831,35 +840,49 @@ async function downloadBandcampPageImage(tab) {
         }
     } catch (e) {
         console.error(`ERROR: DownloadImages: Failed to execute script on tab ${tab.id} to get image URLs:`, e);
+        await showPageNotification(tab.id, "Error extracting image URLs from page.", "error");
         return;
     }
 
+    // Check if any image URLs were actually found by the script
     if (!imageUrls || (!imageUrls.popupImageUrl && !imageUrls.customHeaderUrl && !imageUrls.backgroundImageUrl)) {
         console.log(`INFO: DownloadImages: No target images (Artist, Header, or Background) found on tab ${tab.id} (${tabUrl}).`);
-        if (!imageUrls.popupImageUrl && !imageUrls.customHeaderUrl && !imageUrls.backgroundImageUrl) {
-             return;
-        }
+        await showPageNotification(tab.id, "No downloadable images found on this page.", "error");
+        return; 
     }
 
     const tabOrigin = new URL(tabUrl).origin;
+    let downloadsAttempted = 0;
 
     if (imageUrls.popupImageUrl) {
-        await downloadImagePair("Artist Image", imageUrls.popupImageUrl, tabOrigin);
+        await downloadImagePair("Artist Image", imageUrls.popupImageUrl, tabOrigin); // Assumes downloadImagePair is defined
+        downloadsAttempted++;
     } else {
         console.log("INFO: DownloadImages: No 'Artist Image' found to download.");
     }
 
     if (imageUrls.customHeaderUrl) {
-        await downloadImagePair("Custom Header", imageUrls.customHeaderUrl, tabOrigin);
+        await downloadImagePair("Custom Header", imageUrls.customHeaderUrl, tabOrigin); // Assumes downloadImagePair
+        downloadsAttempted++;
     } else {
         console.log("INFO: DownloadImages: No 'Custom Header' image found to download.");
     }
     
     if (imageUrls.backgroundImageUrl) {
-        await downloadImagePair("Background Image", imageUrls.backgroundImageUrl, tabOrigin);
+        await downloadImagePair("Background Image", imageUrls.backgroundImageUrl, tabOrigin); // Assumes downloadImagePair
+        downloadsAttempted++;
     } else {
         console.log("INFO: DownloadImages: No 'Background Image' from style tag found to download.");
     }
+
+    // Final notification based on whether any downloads were actually attempted
+    if (downloadsAttempted > 0) {
+        await showPageNotification(tab.id, `${downloadsAttempted} image download process(es) initiated.`, "success", 3500);
+    } else if (imageUrls && (imageUrls.popupImageUrl || imageUrls.customHeaderUrl || imageUrls.backgroundImageUrl)) {
+        // This case means URLs might have been found but all were skipped (e.g., "blank." images)
+        await showPageNotification(tab.id, "Images found were skipped (e.g., blank images).", "success", 3000);
+    }
+    // The "No target images found" is handled earlier if all imageUrls.* were initially null.
 }
 
 
