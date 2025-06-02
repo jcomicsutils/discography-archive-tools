@@ -19,7 +19,7 @@
                 <li><button id="copyNypTitlesUrlsBtn">Copy NYP/Free Titles & URLs</button></li>
                 <li><button id="copyPaidTitlesUrlsBtn">Copy Paid Titles & URLs</button></li>
                 <li><button id="downloadImagesBtn">Download Images</button></li>
-            </ul>
+                <li><button id="copyDownloadPageLinksBtn">Copy Download Links</button></li> </ul>
         </div>
 
         <div id="optionsSection" class="hidden-section">
@@ -31,6 +31,10 @@
             <div class="option-item">
                 <label for="zipcodeInput">Zip Code (for download):</label>
                 <input type="text" id="zipcodeInput" placeholder="e.g., 90210">
+            </div>
+            <div class="option-item">
+                <input type="checkbox" id="notificationsEnabledInput">
+                <label for="notificationsEnabledInput" style="display: inline;">Enable Page Notifications</label>
             </div>
             <button id="saveSettingsBtn">Save Settings</button>
             <p id="statusMessage"></p>
