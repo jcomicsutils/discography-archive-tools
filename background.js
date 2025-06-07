@@ -112,7 +112,6 @@ async function showPageNotification(tabId, message, status = 'success', duration
         }
     } catch (e) {
         console.error(`ERROR: Failed to inject notification CSS into tab ${targetTabId}:`, e);
-        // Do not return here, attempt to show notification anyway if CSS injection fails for some reason
     }
 
     try {
@@ -291,7 +290,7 @@ async function clickDownloadAllNonPaid() {
     }
   }
 
-  await new Promise(r => setTimeout(r, 700)); // Initial delay after script injection
+  await new Promise(r => setTimeout(r, 700));
 
   const targetTabs = activeTabs.filter(t => {
     const cls = classifications[t.id];
@@ -345,7 +344,7 @@ async function clickDownloadAllNonPaid() {
               console.log("INJECTED_WARN: Step 1: Could not find initial download button in tab " + ${tabIdForInjection});
             }
 
-            setTimeout(() => { // First timeout for price input - REMAINS 700ms
+            setTimeout(() => {
               const priceInput = document.querySelector('input#userPrice');
               if (priceInput) {
                 priceInput.value = '0';
@@ -357,7 +356,7 @@ async function clickDownloadAllNonPaid() {
                 console.log("INJECTED_INFO: Step 2: No price input (input#userPrice) found in tab " + ${tabIdForInjection} + ", likely a direct free download.");
               }
 
-              setTimeout(() => { // Second timeout for 'download to your computer' link - REMAINS 700ms
+              setTimeout(() => {
                 const freeDownloadLink = document.querySelector('a.download-panel-free-download-link');
                 if (freeDownloadLink) {
                   freeDownloadLink.click();
@@ -366,7 +365,7 @@ async function clickDownloadAllNonPaid() {
                   console.log("INJECTED_WARN: Step 3: Could not find 'download to your computer' link in tab " + ${tabIdForInjection});
                 }
 
-                setTimeout(() => { // Third timeout for the email/zip section to appear - REMAINS 1500ms
+                setTimeout(() => {
                   const emailAddressInput = document.querySelector('input#fan_email_address');
                   const postalCodeInput = document.querySelector('input#fan_email_postalcode');
                   let okButtonClicked = false;
@@ -386,7 +385,6 @@ async function clickDownloadAllNonPaid() {
                         console.log("INJECTED_INFO: Filled zip code and dispatched input/change events for tab " + ${tabIdForInjection});
                     }
 
-                    // Specific delay before clicking "OK" - CHANGED TO 1000ms (1 second)
                     setTimeout(() => {
                         const okButton = Array.from(document.querySelectorAll('button.download-panel-checkout-button')).find(
                             btn => btn.textContent.trim().toUpperCase() === 'OK' && (getComputedStyle(btn).display !== 'none' && btn.offsetParent !== null)
@@ -398,7 +396,7 @@ async function clickDownloadAllNonPaid() {
                         } else {
                             console.log("INJECTED_WARN: Email prompt visible, but 'OK' button not found after 1s delay for tab " + ${tabIdForInjection} + ". Halting for this tab.");
                         }
-                    }, 1000); // MODIFIED DELAY to 1000ms
+                    }, 1000);
 
                   } else {
                     console.log("INJECTED_INFO: Email input field NOT found/visible for tab " + ${tabIdForInjection} + ". Looking for 'Download Now' button.");
@@ -437,214 +435,399 @@ async function clickDownloadAllNonPaid() {
   }
 }
 
-
 async function copyAllKeywordsToClipboard() {
     console.log("INFO: copyAllKeywordsToClipboard: Starting function execution...");
-    let allKeywordsCollected = [];
-    let queriedTabs;
     let notificationTabId = null;
+    let activeTab;
 
     try {
-        const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+        [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
         if (activeTab && activeTab.id) {
             notificationTabId = activeTab.id;
         }
-    } catch(e) { console.error("ERROR: copyAllKeywordsToClipboard: Could not get active tab for notifications.", e); }
-
-    try {
-        queriedTabs = await browser.tabs.query({
-            currentWindow: true,
-            url: [
-                "*://*.bandcamp.com/album/*",
-                "*://*.bandcamp.com/track/*"
-            ]
-        });
     } catch (e) {
-        console.error("ERROR: copyAllKeywordsToClipboard: Failed to query tabs:", e);
-        if (notificationTabId) await showPageNotification(notificationTabId, "Error querying tabs.", "error");
+        console.error("ERROR: copyAllKeywordsToClipboard: Could not get active tab.", e);
         return;
     }
 
-    console.log(`INFO: copyAllKeywordsToClipboard: tabs.query initially returned ${queriedTabs.length} tabs.`);
-    const activeTabsToProcess = queriedTabs.filter(tab => isActiveTab(tab, "copyAllKeywordsToClipboard"));
-    console.log(`INFO: copyAllKeywordsToClipboard: After filtering, processing ${activeTabsToProcess.length} active, non-discarded tabs.`);
-
-    if (activeTabsToProcess.length === 0) {
-        console.log("INFO: copyAllKeywordsToClipboard: No active, non-discarded matching Bandcamp tabs found.");
-        if (notificationTabId) await showPageNotification(notificationTabId, "No active Bandcamp tabs found.", "error");
+    if (!notificationTabId || !activeTab.url) {
+        console.error("ERROR: copyAllKeywordsToClipboard: No active tab or URL found.");
         return;
     }
 
-    activeTabsToProcess.forEach((t, index) => {
-        console.log(`INFO_VERBOSE: copyAllKeywordsToClipboard: Will process Tab ${index + 1}/${activeTabsToProcess.length} - ID: ${t.id}, URL: ${t.url}, Title: ${t.title}, Status: ${t.status}`);
-    });
+    const artistPageRegex = /^https?:\/\/[^/.]+\.bandcamp\.com\/(music\/?|[?#]|$)/;
 
-    for (let i = 0; i < activeTabsToProcess.length; i++) {
-        const tab = activeTabsToProcess[i];
-        if (!tab.id) {
-            console.warn(`WARN: copyAllKeywordsToClipboard: Active tab ${i + 1} (URL: ${tab.url}) unexpectedly has no ID, skipping.`);
-            continue;
-        }
-        if (tab.url && (tab.url.startsWith('about:') || tab.url.startsWith('moz-extension:'))) {
-            console.warn(`WARN: copyAllKeywordsToClipboard: Active tab ${tab.id} is a privileged URL (${tab.url}), skipping script execution.`);
-            continue;
-        }
+    if (artistPageRegex.test(activeTab.url)) {
+        console.log(`INFO: copyAllKeywordsToClipboard: Detected artist page (${activeTab.url}). Starting background fetch process.`);
+        await showPageNotification(notificationTabId, "Scanning artist page for releases...", "success", 2000);
 
-        console.log(`INFO: copyAllKeywordsToClipboard: Attempting to execute script on tab ${i + 1}/${activeTabsToProcess.length} - ID: ${tab.id}, URL: ${tab.url}`);
-        const tabIdForInjection = tab.id;
-
+        let albumUrls;
         try {
-            const results = await browser.tabs.executeScript(tab.id, {
+            const results = await browser.tabs.executeScript(notificationTabId, {
                 code: `
                     (function() {
-                        let extractedKeywords = [];
-                        try {
-                            const ldJsonScript = document.querySelector('script[type="application/ld+json"]');
-                            if (ldJsonScript && ldJsonScript.textContent) {
-                                const jsonData = JSON.parse(ldJsonScript.textContent);
-                                let tempKeywords = [];
-                                if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) {
-                                    tempKeywords = jsonData.keywords;
-                                } else if (jsonData && jsonData.albumRelease && Array.isArray(jsonData.albumRelease) && jsonData.albumRelease.length > 0 && jsonData.albumRelease[0].keywords && Array.isArray(jsonData.albumRelease[0].keywords)) {
-                                    tempKeywords = jsonData.albumRelease[0].keywords;
-                                } else if (jsonData && jsonData.byArtist && jsonData.byArtist.keywords && Array.isArray(jsonData.byArtist.keywords)) {
-                                     tempKeywords = jsonData.byArtist.keywords;
-                                } else if (jsonData && jsonData.publisher && jsonData.publisher.keywords && Array.isArray(jsonData.publisher.keywords)) {
-                                     tempKeywords = jsonData.publisher.keywords;
-                                }
-                                if (tempKeywords.length > 0) {
-                                    extractedKeywords = tempKeywords.filter(kw => typeof kw === 'string');
-                                }
+                        const links = new Set();
+                        document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a').forEach(a => {
+                            if (a.href && (a.href.includes('/album/') || a.href.includes('/track/'))) {
+                                links.add(a.href);
                             }
-                        } catch (e) {
-                            console.error('INJECTED_SCRIPT_ERROR: Error during keyword extraction in tab ' + ${tabIdForInjection} + ':', e.toString());
-                        }
-                        return extractedKeywords;
+                        });
+                        return Array.from(links);
                     })();
                 `
             });
-
-            if (results && results[0] && Array.isArray(results[0]) && results[0].length > 0) {
-                allKeywordsCollected.push(...results[0]);
-            }
+            albumUrls = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
         } catch (e) {
-            console.error('ERROR: copyAllKeywordsToClipboard: Failed to execute script or process results for tab ' + tab.id + ' (' + tab.title + '):', e.toString(), e.stack);
+            console.error("ERROR: copyAllKeywordsToClipboard: Failed to inject script to scrape album links.", e);
+            await showPageNotification(notificationTabId, "Error scanning page for releases.", "error");
+            return;
         }
-    }
 
-    console.log("INFO: copyAllKeywordsToClipboard: Finished processing all tabs. Total keywords collected initially: " + allKeywordsCollected.length);
+        if (albumUrls.length === 0) {
+            console.log("INFO: copyAllKeywordsToClipboard: No album/track links found on the artist page.");
+            await showPageNotification(notificationTabId, "No album or track links found on this page.", "error");
+            return;
+        }
 
-    if (allKeywordsCollected.length === 0) {
-        console.log("INFO: copyAllKeywordsToClipboard: No keywords were collected from any tabs.");
-        if (notificationTabId) await showPageNotification(notificationTabId, "No keywords found to copy.", "error");
-        return;
-    }
+        await showPageNotification(notificationTabId, `Found ${albumUrls.length} releases. Fetching tags in batches...`, "success", 3000);
+        
+        const BATCH_SIZE = 10;
+        let allKeywordsCollected = [];
+        let pagesScanned = 0;
 
-    const uniqueKeywords = Array.from(new Set(allKeywordsCollected.map(kw => kw.toLowerCase().trim()).filter(kw => kw)));
-    console.log("INFO: copyAllKeywordsToClipboard: Unique keywords (normalized):", uniqueKeywords);
+        for (let i = 0; i < albumUrls.length; i += BATCH_SIZE) {
+            const batchUrls = albumUrls.slice(i, i + BATCH_SIZE);
+            
+            const batchPromises = batchUrls.map(url => 
+                fetch(url)
+                    .then(response => {
+                        if (!response.ok) {
+                            console.warn(`WARN: Fetch failed for ${url} with status ${response.status}`);
+                            return null;
+                        }
+                        return response.text();
+                    })
+                    .catch(e => {
+                        console.error(`ERROR: Failed to fetch ${url}:`, e);
+                        return null;
+                    })
+            );
 
-    if (uniqueKeywords.length === 0) {
-        console.log("INFO: copyAllKeywordsToClipboard: After normalization, no valid keywords remain.");
-        if (notificationTabId) await showPageNotification(notificationTabId, "No valid keywords to copy.", "error");
-        return;
-    }
+            const htmlTexts = await Promise.all(batchPromises);
 
-    const formattedKeywords = uniqueKeywords.join('; ');
-    console.log("INFO: copyAllKeywordsToClipboard: Formatted keywords string for clipboard:", formattedKeywords);
+            for (const htmlText of htmlTexts) {
+                if (!htmlText) continue;
 
-    const copySuccess = await copyTextToClipboard(formattedKeywords);
+                try {
+                    const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
+                    if (jsonMatch && jsonMatch[1]) {
+                        const jsonData = JSON.parse(jsonMatch[1]);
+                        let tempKeywords = [];
+                        if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) {
+                           tempKeywords = jsonData.keywords;
+                       } else if (jsonData && jsonData.albumRelease && Array.isArray(jsonData.albumRelease) && jsonData.albumRelease.length > 0 && jsonData.albumRelease[0].keywords && Array.isArray(jsonData.albumRelease[0].keywords)) {
+                           tempKeywords = jsonData.albumRelease[0].keywords;
+                       } else if (jsonData && jsonData.byArtist && jsonData.byArtist.keywords && Array.isArray(jsonData.byArtist.keywords)) {
+                            tempKeywords = jsonData.byArtist.keywords;
+                       } else if (jsonData && jsonData.publisher && jsonData.publisher.keywords && Array.isArray(jsonData.publisher.keywords)) {
+                            tempKeywords = jsonData.publisher.keywords;
+                       }
+                       if (tempKeywords.length > 0) {
+                           allKeywordsCollected.push(...tempKeywords.filter(kw => typeof kw === 'string'));
+                       }
+                    }
+                } catch(e) {
+                    console.error("ERROR: Failed to parse page content for tags:", e);
+                }
+            }
+            pagesScanned += batchUrls.length;
+            console.log(`INFO: Finished batch. Total pages processed so far: ${pagesScanned}/${albumUrls.length}`);
+            if (i + BATCH_SIZE < albumUrls.length) {
+                await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${albumUrls.length} releases...`, "success", 2000);
+            }
+        }
 
-    if (notificationTabId) {
+        console.log(`INFO: copyAllKeywordsToClipboard: Finished all batches. Total keywords collected initially: ${allKeywordsCollected.length}`);
+
+        if (allKeywordsCollected.length === 0) {
+            await showPageNotification(notificationTabId, "No keywords found in any releases.", "error");
+            return;
+        }
+
+        const uniqueKeywords = Array.from(new Set(allKeywordsCollected.map(kw => kw.toLowerCase().trim()).filter(kw => kw)));
+        const formattedKeywords = uniqueKeywords.join('; ');
+        const copySuccess = await copyTextToClipboard(formattedKeywords);
+
         if (copySuccess) {
-            await showPageNotification(notificationTabId, "Tags copied!", "success");
+            await showPageNotification(notificationTabId, `All tags from ${albumUrls.length} releases copied!`, "success");
         } else {
             await showPageNotification(notificationTabId, "Failed to copy tags.", "error");
+        }
+
+    } else {
+        console.log("INFO: copyAllKeywordsToClipboard: Not an artist page. Falling back to method for scanning open tabs.");
+        let allKeywordsCollected = [];
+        let queriedTabs;
+        try {
+            queriedTabs = await browser.tabs.query({
+                currentWindow: true,
+                url: [ "*://*.bandcamp.com/album/*", "*://*.bandcamp.com/track/*" ]
+            });
+        } catch (e) {
+            console.error("ERROR: copyAllKeywordsToClipboard: Failed to query tabs:", e);
+            if (notificationTabId) await showPageNotification(notificationTabId, "Error querying tabs.", "error");
+            return;
+        }
+        const activeTabsToProcess = queriedTabs.filter(tab => isActiveTab(tab, "copyAllKeywordsToClipboard"));
+        if (activeTabsToProcess.length === 0) {
+            if (notificationTabId) await showPageNotification(notificationTabId, "No active Bandcamp tabs found.", "error");
+            return;
+        }
+        for (let tab of activeTabsToProcess) {
+            try {
+                const results = await browser.tabs.executeScript(tab.id, {
+                    code: `
+                        (function() {
+                            let extractedKeywords = [];
+                            try {
+                                const ldJsonScript = document.querySelector('script[type="application/ld+json"]');
+                                if (ldJsonScript && ldJsonScript.textContent) {
+                                    const jsonData = JSON.parse(ldJsonScript.textContent);
+                                    let tempKeywords = [];
+                                    if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) {
+                                        tempKeywords = jsonData.keywords;
+                                    } else if (jsonData && jsonData.albumRelease && Array.isArray(jsonData.albumRelease) && jsonData.albumRelease.length > 0 && jsonData.albumRelease[0].keywords && Array.isArray(jsonData.albumRelease[0].keywords)) {
+                                        tempKeywords = jsonData.albumRelease[0].keywords;
+                                    } else if (jsonData && jsonData.byArtist && jsonData.byArtist.keywords && Array.isArray(jsonData.byArtist.keywords)) {
+                                         tempKeywords = jsonData.byArtist.keywords;
+                                    } else if (jsonData && jsonData.publisher && jsonData.publisher.keywords && Array.isArray(jsonData.publisher.keywords)) {
+                                         tempKeywords = jsonData.publisher.keywords;
+                                    }
+                                    if (tempKeywords.length > 0) {
+                                        extractedKeywords = tempKeywords.filter(kw => typeof kw === 'string');
+                                    }
+                                }
+                            } catch (e) { console.error('INJECTED_SCRIPT_ERROR: Error during keyword extraction:', e.toString()); }
+                            return extractedKeywords;
+                        })();
+                    `
+                });
+                if (results && results[0] && Array.isArray(results[0]) && results[0].length > 0) {
+                    allKeywordsCollected.push(...results[0]);
+                }
+            } catch (e) {
+                console.error('ERROR: copyAllKeywordsToClipboard: Failed to execute script for tab ' + tab.id + ':', e.toString());
+            }
+        }
+        if (allKeywordsCollected.length === 0) {
+            if (notificationTabId) await showPageNotification(notificationTabId, "No keywords found to copy.", "error");
+            return;
+        }
+        const uniqueKeywords = Array.from(new Set(allKeywordsCollected.map(kw => kw.toLowerCase().trim()).filter(kw => kw)));
+        const formattedKeywords = uniqueKeywords.join('; ');
+        const copySuccess = await copyTextToClipboard(formattedKeywords);
+        if (notificationTabId) {
+            await showPageNotification(notificationTabId, copySuccess ? "Tags copied!" : "Failed to copy tags.", copySuccess ? "success" : "error");
         }
     }
 }
 
+
 // Function to copy titles and URLs based on classification type
 async function copyTitlesAndUrls(requestedType) {
     console.log(`INFO: copyTitlesAndUrls: Starting for type "${requestedType}"...`);
-    classifications = {};
-    let outputLines = [];
     let notificationTabId = null;
+    let activeTab;
 
     try {
-        const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
-        if (activeTab && activeTab.id) notificationTabId = activeTab.id;
-    } catch(e) { console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Could not get active tab for notifications.`, e); }
-
-
-    let initiallyQueriedTabs;
-    try {
-        initiallyQueriedTabs = await browser.tabs.query({
-            currentWindow: true,
-            url: [
-                "*://*.bandcamp.com/album/*",
-                "*://*.bandcamp.com/track/*"
-            ]
-        });
+        [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.id) {
+            notificationTabId = activeTab.id;
+        }
     } catch (e) {
-        console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Failed to query tabs:`, e);
-        if (notificationTabId) await showPageNotification(notificationTabId, "Error querying tabs.", "error");
+        console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Could not get active tab.`, e);
         return;
     }
 
-    console.log(`INFO: copyTitlesAndUrls (${requestedType}): Initially queried ${initiallyQueriedTabs.length} tabs.`);
-    const activeTabs = initiallyQueriedTabs.filter(tab => isActiveTab(tab, `copyTitlesAndUrls (${requestedType})`));
-    console.log(`INFO: copyTitlesAndUrls (${requestedType}): After filtering, processing ${activeTabs.length} active tabs.`);
-
-    if (!activeTabs.length) {
-        console.log(`INFO: copyTitlesAndUrls (${requestedType}): No active Bandcamp tabs found.`);
-        if (notificationTabId) await showPageNotification(notificationTabId, "No active Bandcamp tabs found.", "error");
+    if (!notificationTabId || !activeTab.url) {
+        console.error("ERROR: copyTitlesAndUrls: No active tab or URL found.");
         return;
     }
 
-    for (const tab of activeTabs) {
+    const artistPageRegex = /^https?:\/\/[^/.]+\.bandcamp\.com\/(music\/?|[?#]|$)/;
+
+    if (artistPageRegex.test(activeTab.url)) {
+        console.log(`INFO: copyTitlesAndUrls: Detected artist page (${activeTab.url}). Starting background fetch for type "${requestedType}".`);
+        await showPageNotification(notificationTabId, "Scanning artist page for releases...", "success", 2000);
+
+        let albumUrls;
         try {
-            await browser.tabs.executeScript(tab.id, { file: "contentScript.js" });
+            const results = await browser.tabs.executeScript(notificationTabId, {
+                code: `
+                    (function() {
+                        const links = new Set();
+                        document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a').forEach(a => {
+                            if (a.href && (a.href.includes('/album/') || a.href.includes('/track/'))) {
+                                links.add(a.href);
+                            }
+                        });
+                        return Array.from(links);
+                    })();
+                `
+            });
+            albumUrls = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
         } catch (e) {
-            console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Failed to inject classification script into tab ${tab.id}:`, e);
-        }
-    }
-
-    await new Promise(r => setTimeout(r, 700));
-
-    for (const tab of activeTabs) {
-        const classification = classifications[tab.id];
-        let includeTab = false;
-
-        if (requestedType === 'nypFree') {
-            if (classification === 'nyp' || classification === 'free') {
-                includeTab = true;
-            }
-        } else if (requestedType === 'paid') {
-            if (classification !== 'nyp' && classification !== 'free') {
-                includeTab = true;
-            }
+            console.error(`ERROR: copyTitlesAndUrls: Failed to scrape album links.`, e);
+            await showPageNotification(notificationTabId, "Error scanning page for releases.", "error");
+            return;
         }
 
-        if (includeTab) {
-            if (tab.title && tab.url) {
-                outputLines.push(tab.title.trim());
-                outputLines.push(tab.url);
+        if (albumUrls.length === 0) {
+            await showPageNotification(notificationTabId, "No album or track links found on this page.", "error");
+            return;
+        }
+
+        await showPageNotification(notificationTabId, `Found ${albumUrls.length} releases. Classifying in batches...`, "success", 3000);
+        
+        const BATCH_SIZE = 10;
+        let outputLines = [];
+        let pagesScanned = 0;
+
+        for (let i = 0; i < albumUrls.length; i += BATCH_SIZE) {
+            const batchUrls = albumUrls.slice(i, i + BATCH_SIZE);
+            
+            const batchPromises = batchUrls.map(url => 
+                fetch(url)
+                    .then(response => response.ok ? response.text() : null)
+                    .then(htmlText => ({ url, htmlText }))
+                    .catch(e => {
+                        console.error(`ERROR: Failed to fetch ${url}:`, e);
+                        return { url, htmlText: null };
+                    })
+            );
+
+            const results = await Promise.all(batchPromises);
+
+            for (const result of results) {
+                if (!result.htmlText) continue;
+
+                try {
+                    const titleMatch = result.htmlText.match(/<title>(.*?)<\/title>/);
+                    const title = titleMatch ? titleMatch[1].trim() : "Untitled";
+
+                    let classification = 'paid';
+                    const nypMatch = result.htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>[\s\S]*?<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
+                    
+                    if (nypMatch && nypMatch[1]) {
+                        const txt = nypMatch[1].trim().toLowerCase();
+                        if (txt === 'name your price' || txt === 'free download') {
+                            classification = 'nyp';
+                        }
+                    } else {
+                        const freeButtonMatch = result.htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
+                        if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download') {
+                           classification = 'free';
+                        }
+                    }
+                    
+                    let includePage = false;
+                    if (requestedType === 'nypFree' && (classification === 'nyp' || classification === 'free')) {
+                        includePage = true;
+                    } else if (requestedType === 'paid' && classification === 'paid') {
+                        includePage = true;
+                    }
+                    
+                    if (includePage) {
+                        outputLines.push(title);
+                        outputLines.push(result.url);
+                    }
+                } catch(e) {
+                    console.error("ERROR: Failed to parse content for " + result.url, e);
+                }
+            }
+            pagesScanned += batchUrls.length;
+            if (i + BATCH_SIZE < albumUrls.length) {
+                await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${albumUrls.length} releases...`, "success", 2000);
             }
         }
-    }
 
-    if (outputLines.length > 0) {
-        const outputString = outputLines.join('\n');
-        const copySuccess = await copyTextToClipboard(outputString);
-        if (notificationTabId) {
+        if (outputLines.length > 0) {
+            const outputString = outputLines.join('\n');
+            const copySuccess = await copyTextToClipboard(outputString);
             const typeString = requestedType === 'nypFree' ? 'NYP/Free' : 'Paid';
             await showPageNotification(notificationTabId,
-                copySuccess ? `${typeString} info copied!` : `Failed to copy ${typeString} info.`,
+                copySuccess ? `${typeString} info from ${outputLines.length / 2} releases copied!` : `Failed to copy ${typeString} info.`,
                 copySuccess ? "success" : "error");
+        } else {
+            const typeString = requestedType === 'nypFree' ? 'NYP/Free' : 'Paid';
+            await showPageNotification(notificationTabId, `No ${typeString} releases found to copy.`, "error");
         }
+
     } else {
-        console.log(`INFO: copyTitlesAndUrls (${requestedType}): No tabs matched the type "${requestedType}" or no data to copy.`);
-        if (notificationTabId) await showPageNotification(notificationTabId, `No ${requestedType === 'nypFree' ? 'NYP/Free' : 'Paid'} info found to copy.`, "error");
+        console.log(`INFO: copyTitlesAndUrls: Not an artist page. Falling back to method for scanning open tabs for type "${requestedType}".`);
+        classifications = {};
+        let outputLines = [];
+
+        let initiallyQueriedTabs;
+        try {
+            initiallyQueriedTabs = await browser.tabs.query({
+                currentWindow: true,
+                url: [ "*://*.bandcamp.com/album/*", "*://*.bandcamp.com/track/*" ]
+            });
+        } catch (e) {
+            console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Failed to query tabs:`, e);
+            if (notificationTabId) await showPageNotification(notificationTabId, "Error querying tabs.", "error");
+            return;
+        }
+
+        const activeTabs = initiallyQueriedTabs.filter(tab => isActiveTab(tab, `copyTitlesAndUrls (${requestedType})`));
+        if (!activeTabs.length) {
+            if (notificationTabId) await showPageNotification(notificationTabId, "No active Bandcamp tabs found.", "error");
+            return;
+        }
+
+        for (const tab of activeTabs) {
+            try {
+                await browser.tabs.executeScript(tab.id, { file: "contentScript.js" });
+            } catch (e) {
+                console.error(`ERROR: copyTitlesAndUrls (${requestedType}): Failed to inject classification script into tab ${tab.id}:`, e);
+            }
+        }
+
+        await new Promise(r => setTimeout(r, 700));
+
+        for (const tab of activeTabs) {
+            const classification = classifications[tab.id];
+            let includeTab = false;
+
+            if (requestedType === 'nypFree' && (classification === 'nyp' || classification === 'free')) {
+                includeTab = true;
+            } else if (requestedType === 'paid') {
+                if (classification !== 'nyp' && classification !== 'free') {
+                    includeTab = true;
+                }
+            }
+
+            if (includeTab) {
+                if (tab.title && tab.url) {
+                    outputLines.push(tab.title.trim());
+                    outputLines.push(tab.url);
+                }
+            }
+        }
+
+        if (outputLines.length > 0) {
+            const outputString = outputLines.join('\n');
+            const copySuccess = await copyTextToClipboard(outputString);
+            if (notificationTabId) {
+                const typeString = requestedType === 'nypFree' ? 'NYP/Free' : 'Paid';
+                await showPageNotification(notificationTabId,
+                    copySuccess ? `${typeString} info copied!` : `Failed to copy ${typeString} info.`,
+                    copySuccess ? "success" : "error");
+            }
+        } else {
+            if (notificationTabId) await showPageNotification(notificationTabId, `No ${requestedType === 'nypFree' ? 'NYP/Free' : 'Paid'} info found to copy.`, "error");
+        }
     }
 }
 
@@ -931,12 +1114,10 @@ async function copyDownloadPageLinks() {
             const results = await browser.tabs.executeScript(tab.id, {
                 code: `
                     (function() {
-                        // More robust selector to find the link, prioritizing the one with the specific data-bind
                         const downloadLinkElement = document.querySelector('a[data-bind="attr: { href: downloadUrl }, visible: downloadReady() && !downloadError()"]');
                         if (downloadLinkElement && downloadLinkElement.href) {
                             return downloadLinkElement.href;
                         }
-                        // Fallback if the primary selector fails, though less specific
                         const genericDownloadLink = Array.from(document.querySelectorAll('a')).find(a => a.textContent.trim().toLowerCase() === 'download' && a.href.includes('bcbits.com/download/'));
                         if (genericDownloadLink && genericDownloadLink.href) {
                              console.log("INJECTED_SCRIPT_WARN: Used fallback selector for download link in tab " + ${tab.id});
@@ -947,7 +1128,7 @@ async function copyDownloadPageLinks() {
                 `
             });
 
-            if (results && results[0]) { // results[0] will be the href string or null
+            if (results && results[0]) {
                 collectedLinks.push(results[0]);
                 console.log(`INFO: copyDownloadPageLinks: Extracted link ${results[0]} from tab ${tab.id}`);
             } else {
@@ -991,7 +1172,6 @@ async function copyTextToClipboard(text) {
 browser.runtime.onInstalled.addListener(async (details) => {
   console.log("INFO: background.js: onInstalled listener triggered. Attempting to create context menus and set default settings.");
 
-  // Set default notification setting on first install or if not already set
   try {
     const currentSettings = await browser.storage.local.get("notificationsEnabled");
     if (typeof currentSettings.notificationsEnabled === 'undefined') {
@@ -1063,7 +1243,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => { // Made async
+browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     if (message.type === 'classification' && sender.tab?.id != null) {
         classifications[sender.tab.id] = message.value;
     }
@@ -1106,5 +1286,5 @@ browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
                 console.warn(`WARN: Unknown action received from popup: ${message.action}`);
         }
     }
-    return false; // Keep false for onMessage unless you need to send an async response with sendResponse
+    return false;
 });

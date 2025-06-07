@@ -27,17 +27,17 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
     * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) extension is recommended for downloading everything at once.
 
 * **Download Page Images**: From the active Bandcamp page, this feature attempts to download up to three key images:
-    * **Artist Image**: The artist photo (typically from `a.popupImage` or identified fallbacks). Saved as `Artist Image.{original_extension}`.
+    * **Artist Image**: The artist photo (typically from `a.popupImage` or identified fallbacks). Saved as `Artist Photo.{original_extension}`.
     * **Custom Header**: The banner image usually found at the top of artist pages. Saved as `Custom Header.{original_extension}`.
     * **Page Background**: The full-page background image defined in the page's custom styles. Saved as `Background Image.{original_extension}`.
     * For each of these images, it also attempts to download a higher-resolution or original version (often a `_0` variant), saved with an `_orig` suffix and an automatically detected file extension (e.g., `Artist Image_orig.png`).
     * The feature skips downloading common placeholder "blank" images.
 
-* **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs, extracts the associated keywords or tags from their page metadata, removes duplicates, formats them into a single semicolon-separated list (e.g., `tag1; tag2; tag3`), and copies this list to your clipboard.
+* **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs and extracts their tags, or, when used on an artist's main page (e.g., `artist.bandcamp.com`), it finds all releases and fetches their tags in the background without opening new tabs. All tags are combined into a single, semicolon-separated list and copied to your clipboard.
 
-* **Copy NYP/Free Titles & URLs**: Identifies all active Bandcamp tabs classified as NYP or Free, then collects their page titles and URLs. This information is formatted as a list (title on one line, URL on the next, then the next title, etc.) and copied to your clipboard.
+* **Copy NYP/Free Titles & URLs**: Collects the page titles and URLs for all releases classified as "Name Your Price" or "Free." When used on an artist's page, this feature will fetch and classify all releases in the background. On individual album/track pages, it scans your open tabs.
 
-* **Copy Paid Titles & URLs**: Similar to the above, but specifically targets tabs classified as "Paid," collecting and formatting their titles and URLs for clipboard copying.
+* **Copy Paid Titles & URLs**: Similar to the above, but specifically targets releases classified as "Paid," collecting and formatting their titles and URLs for clipboard copying from either an artist's page or your open tabs.
 
 ## How to Use
 
@@ -75,7 +75,7 @@ This extension requests the following permissions, with explanations for why eac
     * To add the "Bandcamp Tools" menu and its sub-options to the right-click context menu on web pages.
 * **`*://*.bandcamp.com/*`**:
     * To allow the extension to run its `contentScript.js` specifically on Bandcamp pages.
-    * To enable `executeScript` calls to target Bandcamp pages for various functions.
+    * To enable `executeScript` and `fetch` calls to target Bandcamp pages for various functions.
     * To ensure context menu items appear only on Bandcamp domains.
 * **`clipboardWrite`**:
     * To allow the extension to copy the collected tags, titles, and URLs directly to your system clipboard for easy pasting into other applications.
@@ -83,7 +83,7 @@ This extension requests the following permissions, with explanations for why eac
     * To allow the extension to download images.
 
 ## Known Issues & Limitations
-* The automated download feature relies on specific CSS selectors on Bandcamp pages. If Bandcamp updates its website structure, these selectors might need to be updated in `background.js`.
+* The automated download and data-extraction features rely on specific CSS selectors and page structures on Bandcamp. If Bandcamp updates its website, these parts of the extension might need to be updated in `background.js`.
 * The timing delays (`setTimeout`) in the download automation are generalized. On very slow connections or machines, they might occasionally be too short, potentially missing an element that hasn't loaded yet.
 
 ## Future Ideas & Enhancements
