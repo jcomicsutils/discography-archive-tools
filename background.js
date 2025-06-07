@@ -859,10 +859,10 @@ async function downloadBandcampPageImage(tab) {
     let downloadsAttempted = 0;
 
     if (imageUrls.popupImageUrl) {
-        await downloadImagePair("Artist Image", imageUrls.popupImageUrl, tabOrigin);
+        await downloadImagePair("Artist Photo", imageUrls.popupImageUrl, tabOrigin);
         downloadsAttempted++;
     } else {
-        console.log("INFO: DownloadImages: No 'Artist Image' found to download.");
+        console.log("INFO: DownloadImages: No 'Artist Photo' found to download.");
     }
 
     if (imageUrls.customHeaderUrl) {
