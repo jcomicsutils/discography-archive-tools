@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'copyNypTitlesUrlsBtn', action: 'copyNypTitlesUrls' },
         { id: 'copyPaidTitlesUrlsBtn', action: 'copyPaidTitlesUrls' },
         { id: 'downloadImagesBtn', action: 'downloadImages' },
+        { id: 'downloadAlbumCoversBtn', action: 'downloadAlbumCovers' },
         { id: 'copyReleasesLinksBtn', action: 'copyReleasesLinks' },
         { id: 'copyDownloadPageLinksBtn', action: 'copyDownloadPageLinks' }
     ];
