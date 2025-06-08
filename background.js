@@ -1159,6 +1159,70 @@ async function copyDownloadPageLinks() {
     }
 }
 
+async function copyReleasesLinks() {
+    console.log("INFO: copyReleasesLinks: Starting function execution...");
+    let activeTab;
+
+    try {
+        [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+    } catch (e) {
+        console.error("ERROR: copyReleasesLinks: Could not get active tab.", e);
+        return;
+    }
+
+    if (!activeTab || !activeTab.id || !activeTab.url) {
+        console.error("ERROR: copyReleasesLinks: No active tab or URL found.");
+        return;
+    }
+
+    const artistPageRegex = /^https?:\/\/[^/.]+\.bandcamp\.com\/(music\/?|[?#]|$)/;
+
+    if (!artistPageRegex.test(activeTab.url)) {
+        console.log(`INFO: copyReleasesLinks: Active tab (${activeTab.url}) is not an artist page.`);
+        await showPageNotification(activeTab.id, "This feature only works on an artist's main page.", "error");
+        return;
+    }
+
+    await showPageNotification(activeTab.id, "Scanning artist page for all release links...", "success", 2000);
+
+    let releaseUrls;
+    try {
+        const results = await browser.tabs.executeScript(activeTab.id, {
+            code: `
+                (function() {
+                    const links = new Set();
+                    document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a').forEach(a => {
+                        if (a.href && (a.href.includes('/album/') || a.href.includes('/track/'))) {
+                            links.add(a.href);
+                        }
+                    });
+                    return Array.from(links);
+                })();
+            `
+        });
+        releaseUrls = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
+    } catch (e) {
+        console.error("ERROR: copyReleasesLinks: Failed to inject script to scrape release links.", e);
+        await showPageNotification(activeTab.id, "Error scanning page for releases.", "error");
+        return;
+    }
+
+    if (releaseUrls.length === 0) {
+        console.log("INFO: copyReleasesLinks: No album/track links found on the artist page.");
+        await showPageNotification(activeTab.id, "No release links found on this page.", "error");
+        return;
+    }
+
+    const formattedLinks = releaseUrls.join('\n');
+    const copySuccess = await copyTextToClipboard(formattedLinks);
+
+    if (copySuccess) {
+        await showPageNotification(activeTab.id, `${releaseUrls.length} release link(s) copied!`, "success");
+    } else {
+        await showPageNotification(activeTab.id, "Failed to copy release links.", "error");
+    }
+}
+
 async function copyTextToClipboard(text) {
     try { if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') { await navigator.clipboard.writeText(text); console.log('SUCCESS: Text successfully copied to clipboard using navigator.clipboard!'); return true; } } catch (err) { console.warn('WARN: navigator.clipboard.writeText failed, trying fallback:', err); }
     console.log('INFO: Attempting to copy to clipboard using document.execCommand fallback.');
@@ -1189,6 +1253,7 @@ browser.runtime.onInstalled.addListener(async (details) => {
     browser.contextMenus.create({ id: "copy-keywords", parentId: "bandcamp-tools", title: "Copy Tags", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
     browser.contextMenus.create({ id: "copy-nyp-titles-urls", parentId: "bandcamp-tools", title: "Copy NYP/Free Titles & URLs", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
     browser.contextMenus.create({ id: "copy-paid-titles-urls", parentId: "bandcamp-tools", title: "Copy Paid Titles & URLs", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
+    browser.contextMenus.create({ id: "copy-releases-links", parentId: "bandcamp-tools", title: "Copy Releases Links", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
     browser.contextMenus.create({ id: "download-images", parentId: "bandcamp-tools", title: "Download Images (Artist, Header, BG)", contexts: ["page", "image"], documentUrlPatterns: [ "*://*.bandcamp.com/album/*", "*://*.bandcamp.com/track/*", "*://*.bandcamp.com/music", "*://*.bandcamp.com/music?*", "*://*.bandcamp.com/" ] });
     console.log("INFO: background.js: All context menus registration attempt complete.");
   } catch (e) { console.error("ERROR: background.js: Major failure during context menu creation in onInstalled:", e); }
@@ -1227,6 +1292,9 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
     case "copy-paid-titles-urls":
       await copyTitlesAndUrls('paid');
       break;
+    case "copy-releases-links":
+        await copyReleasesLinks();
+        break;
     case "download-images":
       if (notificationTab) {
           downloadBandcampPageImage(notificationTab);
@@ -1278,6 +1346,9 @@ browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
                      console.error("ERROR: DownloadImages (Popup): Error querying active tab:", err);
                      await showPageNotification(null, "Error finding active tab.", "error");
                 }
+                break;
+            case "copyReleasesLinks":
+                await copyReleasesLinks();
                 break;
             case "copyDownloadPageLinks": 
                 await copyDownloadPageLinks();

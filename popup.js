@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'copyNypTitlesUrlsBtn', action: 'copyNypTitlesUrls' },
         { id: 'copyPaidTitlesUrlsBtn', action: 'copyPaidTitlesUrls' },
         { id: 'downloadImagesBtn', action: 'downloadImages' },
-        { id: 'copyDownloadPageLinksBtn', action: 'copyDownloadPageLinks' } // New Action
+        { id: 'copyReleasesLinksBtn', action: 'copyReleasesLinks' },
+        { id: 'copyDownloadPageLinksBtn', action: 'copyDownloadPageLinks' }
     ];
 
     actionButtonMappings.forEach(buttonInfo => {

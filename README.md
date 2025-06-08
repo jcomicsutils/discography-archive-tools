@@ -35,6 +35,8 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 
 * **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs and extracts their tags, or, when used on an artist's main page (e.g., `artist.bandcamp.com`), it finds all releases and fetches their tags in the background without opening new tabs. All tags are combined into a single, semicolon-separated list and copied to your clipboard.
 
+* **Copy Releases Links**: When on an artist's main page (e.g., `artist.bandcamp.com`), this option finds all releases on the page and copies their URLs to the clipboard, separated by newlines.
+
 * **Copy NYP/Free Titles & URLs**: Collects the page titles and URLs for all releases classified as "Name Your Price" or "Free." When used on an artist's page, this feature will fetch and classify all releases in the background. On individual album/track pages, it scans your open tabs.
 
 * **Copy Paid Titles & URLs**: Similar to the above, but specifically targets releases classified as "Paid," collecting and formatting their titles and URLs for clipboard copying from either an artist's page or your open tabs.
