@@ -24,7 +24,7 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
     * Clicks the initial download button.
     * Automatically sets the price to "0" for "Name Your Price" items.
     * Proceeding through subsequent confirmation steps. If an email address and zip code is required during the download process, the extension will automatically fill these fields using the values you've saved in the options panel.
-    * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) extension is recommended for downloading everything at once.
+    * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) extension is recommended for downloading everything at once. Or [JDownloader](https://jdownloader.org/) using the `Copy Download Links` feature.
 
 * **Download Page Images**: From the active Bandcamp page, this feature attempts to download up to three key images:
     * **Artist Image**: The artist photo (typically from `a.popupImage` or identified fallbacks). Saved as `Artist Photo.{original_extension}`.
@@ -33,9 +33,13 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
     * For each of these images, it also attempts to download a higher-resolution or original version (often a `_0` variant), saved with an `_orig` suffix and an automatically detected file extension (e.g., `Artist Image_orig.png`).
     * The feature skips downloading common placeholder "blank" images.
 
+* **Download Album Covers**: From the active Bandcamp artist page, this feature attempts to download all Album Covers in the highest quality (`_0` variant) into a `{artist} - Album Covers` folder.
+
 * **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs and extracts their tags, or, when used on an artist's main page (e.g., `artist.bandcamp.com`), it finds all releases and fetches their tags in the background without opening new tabs. All tags are combined into a single, semicolon-separated list and copied to your clipboard.
 
 * **Copy Releases Links**: When on an artist's main page (e.g., `artist.bandcamp.com`), this option finds all releases on the page and copies their URLs to the clipboard, separated by newlines.
+
+* **Copy Download Links**: Checks all bandcamp tabs for download links (the links at the download page, after the zip file is prepared) and copies to clipboard.
 
 * **Copy NYP/Free Titles & URLs**: Collects the page titles and URLs for all releases classified as "Name Your Price" or "Free." When used on an artist's page, this feature will fetch and classify all releases in the background. On individual album/track pages, it scans your open tabs.
 
