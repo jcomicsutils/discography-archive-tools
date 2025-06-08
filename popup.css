@@ -155,3 +155,31 @@ ul#popup-menu button:active, #optionsSection button#saveSettingsBtn:active {
 #mainMenuSection.active-section {
     display: block;
 }
+
+/* Compound Button for "Copy Releases" */
+.compound-button-li {
+    display: flex;
+}
+
+.compound-button-li button {
+    margin-bottom: 0; /* Override default li>button margin */
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+.compound-button-li button.main-action {
+    flex-grow: 3; /* ~75% */
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right-width: 0.5px; /* Thin separator */
+}
+
+.compound-button-li button.sub-action {
+    flex-grow: 1; /* ~25% */
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left-width: 0.5px;
+    text-align: center; /* Center the '& Titles' text */
+    padding-left: 8px;
+    padding-right: 8px;
+}

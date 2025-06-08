@@ -15,6 +15,8 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 
 * **Smart Tab Handling**: All operations that iterate through tabs (sorting, data copying, etc.) ignore hidden or discarded tabs to ensure stability and process only active, relevant pages.
 
+* **Rate-Limiting Prevention**: For artist-page functions that scan many releases (like copying tags or downloading covers), a delay is automatically introduced on very large discographies (>100 releases) to prevent server errors.
+
 * **On-Page Notifications**:
     * Receive brief, auto-fading notifications directly on your current Bandcamp page (typically in the bottom-right corner) for feedback on actions like "Tabs Sorted!" or "Tags Copied!".
 
@@ -33,13 +35,15 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
     * For each of these images, it also attempts to download a higher-resolution or original version (often a `_0` variant), saved with an `_orig` suffix and an automatically detected file extension (e.g., `Artist Image_orig.png`).
     * The feature skips downloading common placeholder "blank" images.
 
-* **Download Album Covers**: From the active Bandcamp artist page, this feature attempts to download all Album Covers in the highest quality (`_0` variant) into a `{artist} - Album Covers` folder.
+* **Download Album Covers**: From an active Bandcamp artist page, this feature finds all releases and downloads the highest quality cover art (`_0` variant), each into a new folder named after the artist (`{artist} - Album Covers`).
 
-* **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs and extracts their tags, or, when used on an artist's main page (e.g., `artist.bandcamp.com`), it finds all releases and fetches their tags in the background without opening new tabs. All tags are combined into a single, semicolon-separated list and copied to your clipboard.
+* **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs and extracts their tags. When used on an artist's main page (e.g., `artist.bandcamp.com`), it finds all releases and fetches their tags in the background without opening new tabs. All tags are combined into a single, semicolon-separated list and copied to your clipboard.
 
-* **Copy Releases Links**: When on an artist's main page (e.g., `artist.bandcamp.com`), this option finds all releases on the page and copies their URLs to the clipboard, separated by newlines.
+* **Copy Releases Links & Titles**: This is a compound button available on artist pages (e.g., `artist.bandcamp.com`) that provides two fast actions for copying release information:
+    * **Copy Releases Links** (main button): Finds all releases on the page and copies their URLs to the clipboard, separated by newlines.
+    * **& Titles** (side button): Copies both the release URL and a formatted title (`Title | Artist`) for all releases on the page. It finds the correct artist for each release, uses the main page name if release doesn't have a set artist.
 
-* **Copy Download Links**: Checks all bandcamp tabs for download links (the links at the download page, after the zip file is prepared) and copies to clipboard.
+* **Copy Download Links**: Checks all open Bandcamp download pages (the pages where the ZIP file is ready) and copies the final download links to the clipboard.
 
 * **Copy NYP/Free Titles & URLs**: Collects the page titles and URLs for all releases classified as "Name Your Price" or "Free." When used on an artist's page, this feature will fetch and classify all releases in the background. On individual album/track pages, it scans your open tabs.
 
@@ -54,7 +58,7 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
     * Browse to the directory where you saved the extension files and select the `manifest.json` file.
 
 2.  **Accessing Features:**
-    * Click the extension icon and select desired feature; Or
+    * Click the extension icon and select the desired feature; Or
     * Navigate to any Bandcamp album page (`*.bandcamp.com/album/*`) or track page (`*.bandcamp.com/track/*`).
     * Right-click anywhere on the page to open the context menu.
     * Look for the "Bandcamp Tools" submenu.
@@ -87,6 +91,8 @@ This extension requests the following permissions, with explanations for why eac
     * To allow the extension to copy the collected tags, titles, and URLs directly to your system clipboard for easy pasting into other applications.
 * **`downloads`**:
     * To allow the extension to download images.
+* **`storage`**:
+    * To save user settings (email and zip code) for the download helper.
 
 ## Known Issues & Limitations
 * The automated download and data-extraction features rely on specific CSS selectors and page structures on Bandcamp. If Bandcamp updates its website, these parts of the extension might need to be updated in `background.js`.

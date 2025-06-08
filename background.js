@@ -553,6 +553,12 @@ async function copyAllKeywordsToClipboard() {
             if (i + BATCH_SIZE < albumUrls.length) {
                 await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${albumUrls.length} releases...`, "success", 2000);
             }
+            
+            if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
+                console.log(`INFO: copyAllKeywordsToClipboard: More than 100 albums detected. Pausing for 5 seconds between batches.`);
+                await showPageNotification(notificationTabId, `Pausing for 5s to avoid errors...`, "success", 4800);
+                await new Promise(r => setTimeout(r, 5000));
+            }
         }
 
         console.log(`INFO: copyAllKeywordsToClipboard: Finished all batches. Total keywords collected initially: ${allKeywordsCollected.length}`);
@@ -756,6 +762,12 @@ async function copyTitlesAndUrls(requestedType) {
             pagesScanned += batchUrls.length;
             if (i + BATCH_SIZE < albumUrls.length) {
                 await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${albumUrls.length} releases...`, "success", 2000);
+            }
+            
+            if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
+                console.log(`INFO: copyTitlesAndUrls: More than 100 albums detected. Pausing for 5 seconds between batches.`);
+                await showPageNotification(notificationTabId, `Pausing for 5s to avoid errors...`, "success", 4800);
+                await new Promise(r => setTimeout(r, 5000));
             }
         }
 
@@ -1227,6 +1239,12 @@ async function downloadAllAlbumCovers() {
 
         await Promise.all(batchPromises);
         await showPageNotification(activeTab.id, `Processed ${i + batchUrls.length}/${releaseUrls.length}...`, "success", 2000);
+
+        if (releaseUrls.length > 100 && (i + BATCH_SIZE < releaseUrls.length)) {
+            console.log(`INFO: downloadAllAlbumCovers: More than 100 albums detected. Pausing for 5 seconds between batches.`);
+            await showPageNotification(activeTab.id, `Pausing for 5s to avoid errors...`, "success", 4800);
+            await new Promise(r => setTimeout(r, 5000));
+        }
     }
     
     // Final notification
@@ -1389,6 +1407,101 @@ async function copyReleasesLinks() {
     }
 }
 
+async function copyReleasesAndTitles() {
+    console.log("INFO: copyReleasesAndTitles: Starting function execution...");
+    let activeTab;
+    try {
+        [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+    } catch (e) {
+        console.error("ERROR: copyReleasesAndTitles: Could not get active tab.", e);
+        return;
+    }
+
+    if (!activeTab || !activeTab.id || !activeTab.url) {
+        console.error("ERROR: copyReleasesAndTitles: No active tab or URL found.");
+        return;
+    }
+
+    const artistPageRegex = /^https?:\/\/[^/.]+\.bandcamp\.com\/(music\/?|[?#]|$)/;
+
+    if (!artistPageRegex.test(activeTab.url)) {
+        console.log(`INFO: copyReleasesAndTitles: Active tab (${activeTab.url}) is not an artist page.`);
+        await showPageNotification(activeTab.id, "This feature only works on an artist's main page.", "error");
+        return;
+    }
+
+    await showPageNotification(activeTab.id, "Scanning page for release titles and links...", "success", 2000);
+
+    let releases;
+    try {
+        const results = await browser.tabs.executeScript(activeTab.id, {
+            code: `
+                (function() {
+                    const releaseData = [];
+                    const mainArtistEl = document.querySelector('#band-name-location span.title, #band-name, .band-name');
+                    const mainArtist = mainArtistEl ? mainArtistEl.textContent.trim() : '';
+                    
+                    const links = document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a');
+                    
+                    links.forEach(a => {
+                        if (!a.href || !(a.href.includes('/album/') || a.href.includes('/track/'))) {
+                            return;
+                        }
+
+                        const titleEl = a.querySelector('p.title, .item_link_title');
+                        if (!titleEl) {
+                            return;
+                        }
+
+                        let releaseTitle;
+                        let releaseArtist;
+                        
+                        const artistOverrideEl = titleEl.querySelector('span.artist-override');
+
+                        if (artistOverrideEl) {
+                            releaseArtist = artistOverrideEl.textContent.trim();
+                            const tempTitleEl = titleEl.cloneNode(true);
+                            tempTitleEl.querySelector('span.artist-override').remove();
+                            releaseTitle = tempTitleEl.textContent.trim();
+                        } else {
+                            releaseTitle = titleEl.textContent.trim();
+                            releaseArtist = mainArtist;
+                        }
+                        
+                        const formattedTitle = releaseArtist ? \`\${releaseTitle} | \${releaseArtist}\` : releaseTitle;
+
+                        if (!releaseData.some(r => r.url === a.href)) {
+                            releaseData.push({ title: formattedTitle, url: a.href });
+                        }
+                    });
+                    return releaseData;
+                })();
+            `
+        });
+        releases = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
+    } catch (e) {
+        console.error("ERROR: copyReleasesAndTitles: Failed to inject script to scrape release info.", e);
+        await showPageNotification(activeTab.id, "Error scanning page for releases.", "error");
+        return;
+    }
+
+    if (releases.length === 0) {
+        console.log("INFO: copyReleasesAndTitles: No album/track links found on the artist page.");
+        await showPageNotification(activeTab.id, "No release links found on this page.", "error");
+        return;
+    }
+    
+    const outputString = releases.map(r => `${r.title}\n${r.url}`).join('\n');
+    
+    const copySuccess = await copyTextToClipboard(outputString);
+
+    if (copySuccess) {
+        await showPageNotification(activeTab.id, `${releases.length} release titles & links copied!`, "success");
+    } else {
+        await showPageNotification(activeTab.id, "Failed to copy release info.", "error");
+    }
+}
+
 async function copyTextToClipboard(text) {
     try { if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') { await navigator.clipboard.writeText(text); console.log('SUCCESS: Text successfully copied to clipboard using navigator.clipboard!'); return true; } } catch (err) { console.warn('WARN: navigator.clipboard.writeText failed, trying fallback:', err); }
     console.log('INFO: Attempting to copy to clipboard using document.execCommand fallback.');
@@ -1522,6 +1635,9 @@ browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
                 break;
             case "copyReleasesLinks":
                 await copyReleasesLinks();
+                break;
+            case "copyReleasesAndTitles":
+                await copyReleasesAndTitles();
                 break;
             case "copyDownloadPageLinks": 
                 await copyDownloadPageLinks();
