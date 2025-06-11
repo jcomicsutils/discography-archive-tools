@@ -39,28 +39,32 @@ document.addEventListener('DOMContentLoaded', function () {
     const emailInput = document.getElementById('emailInput');
     const zipcodeInput = document.getElementById('zipcodeInput');
     const notificationsEnabledInput = document.getElementById('notificationsEnabledInput');
+    const saFormatEnabledInput = document.getElementById('saFormatEnabledInput');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusMessage = document.getElementById('statusMessage');
     let optionsAreVisible = false;
 
     function loadSettings() {
-        if (!emailInput || !zipcodeInput || !notificationsEnabledInput) return;
+        if (!emailInput || !zipcodeInput || !notificationsEnabledInput || !saFormatEnabledInput) return;
 
         const defaultSettings = {
             email: '',
             zipcode: '',
-            notificationsEnabled: true
+            notificationsEnabled: true,
+            saFormatEnabled: false
         };
 
         browser.storage.local.get(defaultSettings).then(result => {
             emailInput.value = result.email;
             zipcodeInput.value = result.zipcode;
             notificationsEnabledInput.checked = result.notificationsEnabled;
+            saFormatEnabledInput.checked = result.saFormatEnabled;
         }).catch(error => {
             console.error('Popup: Error loading settings:', error);
             emailInput.value = defaultSettings.email;
             zipcodeInput.value = defaultSettings.zipcode;
             notificationsEnabledInput.checked = defaultSettings.notificationsEnabled;
+            saFormatEnabledInput.checked = defaultSettings.saFormatEnabled;
         });
     }
 
@@ -85,16 +89,18 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (saveSettingsBtn && emailInput && zipcodeInput && notificationsEnabledInput && statusMessage) {
+    if (saveSettingsBtn && emailInput && zipcodeInput && notificationsEnabledInput && statusMessage && saFormatEnabledInput) {
         saveSettingsBtn.addEventListener('click', function() {
             const userEmail = emailInput.value.trim();
             const userZipcode = zipcodeInput.value.trim();
             const notificationsEnabled = notificationsEnabledInput.checked;
+            const saFormatEnabled = saFormatEnabledInput.checked;
 
             browser.storage.local.set({
                 email: userEmail,
                 zipcode: userZipcode,
-                notificationsEnabled: notificationsEnabled
+                notificationsEnabled: notificationsEnabled,
+                saFormatEnabled: saFormatEnabled
             })
                 .then(() => {
                     statusMessage.textContent = 'Settings saved!';

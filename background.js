@@ -1359,13 +1359,16 @@ async function copyReleasesLinks() {
         return;
     }
 
-    const artistPageRegex = /^https?:\/\/[^/.]+\.bandcamp\.com\/(music\/?|[?#]|$)/;
+    const artistPageRegex = /^https?:\/\/([^\/]+)\.bandcamp\.com\/(music\/?|[?#]|$)/;
+    const urlMatch = activeTab.url.match(artistPageRegex);
 
-    if (!artistPageRegex.test(activeTab.url)) {
+    if (!urlMatch) {
         console.log(`INFO: copyReleasesLinks: Active tab (${activeTab.url}) is not an artist page.`);
         await showPageNotification(activeTab.id, "This feature only works on an artist's main page.", "error");
         return;
     }
+
+    const settings = await browser.storage.local.get({ saFormatEnabled: false });
 
     await showPageNotification(activeTab.id, "Scanning artist page for all release links...", "success", 2000);
 
@@ -1397,8 +1400,32 @@ async function copyReleasesLinks() {
         return;
     }
 
-    const formattedLinks = releaseUrls.join('\n');
-    const copySuccess = await copyTextToClipboard(formattedLinks);
+    let outputString;
+
+    if (settings.saFormatEnabled) {
+        let artistName;
+        try {
+            const results = await browser.tabs.executeScript(activeTab.id, {
+                code: `(function() { const el = document.querySelector('.band-name, #band-name, span.title'); return el ? el.textContent.trim() : null; })();`
+            });
+            if (results && results[0]) {
+                artistName = results[0];
+            }
+        } catch (e) { console.error("Could not get artist name for SA format", e); }
+        if (!artistName) {
+            artistName = urlMatch[1]; // Fallback to subdomain
+        }
+
+        const artistLine = `${artistName}:`;
+        const pageLine = `\t${activeTab.url}:`;
+        const releaseLines = releaseUrls.map(url => `\t\t${url}`).join('\n');
+        outputString = `${artistLine}\n${pageLine}\n${releaseLines}`;
+
+    } else {
+        outputString = releaseUrls.join('\n');
+    }
+    
+    const copySuccess = await copyTextToClipboard(outputString);
 
     if (copySuccess) {
         await showPageNotification(activeTab.id, `${releaseUrls.length} release link(s) copied!`, "success");
