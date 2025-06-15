@@ -556,7 +556,7 @@ async function copyAllKeywordsToClipboard() {
             
             if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
                 console.log(`INFO: copyAllKeywordsToClipboard: More than 100 albums detected. Pausing for 5 seconds between batches.`);
-                await showPageNotification(notificationTabId, `Pausing for 5s to avoid errors...`, "success", 4800);
+                await showPageNotification(notificationTabId, `(${pagesScanned}/${albumUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
                 await new Promise(r => setTimeout(r, 5000));
             }
         }
@@ -766,7 +766,7 @@ async function copyTitlesAndUrls(requestedType) {
             
             if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
                 console.log(`INFO: copyTitlesAndUrls: More than 100 albums detected. Pausing for 5 seconds between batches.`);
-                await showPageNotification(notificationTabId, `Pausing for 5s to avoid errors...`, "success", 4800);
+                await showPageNotification(notificationTabId, `(${pagesScanned}/${albumUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
                 await new Promise(r => setTimeout(r, 5000));
             }
         }
@@ -1155,7 +1155,7 @@ async function downloadAllAlbumCovers() {
     await showPageNotification(activeTab.id, `Found ${releaseUrls.length} releases. Fetching covers...`, "success", 3000);
     
     let downloadsInitiated = 0;
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 10;
 
     for (let i = 0; i < releaseUrls.length; i += BATCH_SIZE) {
         const batchUrls = releaseUrls.slice(i, i + BATCH_SIZE);
@@ -1163,23 +1163,23 @@ async function downloadAllAlbumCovers() {
         const batchPromises = batchUrls.map(async (url) => {
             try {
                 const response = await fetch(url);
-                if (!response.ok) return null;
+                if (!response.ok) {
+                    console.warn(`WARN: Fetch failed for ${url} with status ${response.status}. Skipping cover.`);
+                    return null;
+                }
                 const htmlText = await response.text();
 
-                // Extract title
                 const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
                 const pageTitle = titleMatch ? titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"') : "Untitled";
                 const sanitizedAlbumTitle = sanitizeFilename(pageTitle);
 
-                // Extract cover art URL using regex
                 const coverLinkMatch = htmlText.match(/<a class="popupImage" href="([^"]+)">/);
                 if (!coverLinkMatch || !coverLinkMatch[1]) {
-                     console.warn(`WARN: No cover found for ${url}`);
+                     console.warn(`WARN: No cover link found on page ${url}. Skipping cover.`);
                      return null;
                 }
                 const baseImageUrl = coverLinkMatch[1];
 
-                // Construct high-res URL
                 const urlObj = new URL(baseImageUrl);
                 const urlPathParts = urlObj.pathname.split('/');
                 const originalFileNameWithExt = urlPathParts[urlPathParts.length - 1];
@@ -1188,8 +1188,7 @@ async function downloadAllAlbumCovers() {
                 const lastUnderscoreIdx = fileNameNoExt.lastIndexOf('_');
 
                 if (lastUnderscoreIdx === -1) {
-                     console.warn(`WARN: Cannot find '_' in filename to create _0 version for ${url}. Downloading base image.`);
-                     // Fallback to downloading the base image if _0 logic fails
+                     console.warn(`WARN: Cannot find '_' in filename to create _0 version for ${url}. Downloading base image as fallback.`);
                      const fallbackExtMatch = baseImageUrl.match(/\.([^.]+)$/);
                      const fallbackExt = fallbackExtMatch ? fallbackExtMatch[1] : 'jpg';
                      const fallbackFilename = `${folderName}/${sanitizedAlbumTitle}.${fallbackExt}`;
@@ -1202,7 +1201,6 @@ async function downloadAllAlbumCovers() {
                 const baseImgDomainPath = urlObj.protocol + '//' + urlObj.hostname + (urlObj.port ? ':' + urlObj.port : '') + urlPathParts.slice(0, -1).join('/') + '/';
                 const highResImageUrl = baseImgDomainPath + numberPart + "_0";
 
-                // Determine file extension
                 let detectedExtension = 'jpg';
                  try {
                     let headResponse = await fetch(highResImageUrl, { method: 'HEAD' });
@@ -1218,10 +1216,9 @@ async function downloadAllAlbumCovers() {
                         detectedExtension = getExtensionFromMimeType(contentType);
                     }
                 } catch (fetchError) {
-                    console.error(`ERROR: Network error determining extension for ${highResImageUrl}. Defaulting.`, fetchError);
+                    console.error(`ERROR: Network error determining extension for ${highResImageUrl}. Defaulting to .jpg.`, fetchError);
                 }
                 
-                // Download
                 const finalFilename = `${folderName}/${sanitizedAlbumTitle}.${detectedExtension}`;
                 browser.downloads.download({
                     url: highResImageUrl,
@@ -1242,14 +1239,13 @@ async function downloadAllAlbumCovers() {
 
         if (releaseUrls.length > 100 && (i + BATCH_SIZE < releaseUrls.length)) {
             console.log(`INFO: downloadAllAlbumCovers: More than 100 albums detected. Pausing for 5 seconds between batches.`);
-            await showPageNotification(activeTab.id, `Pausing for 5s to avoid errors...`, "success", 4800);
+            await showPageNotification(activeTab.id, `(${i + batchUrls.length}/${releaseUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
             await new Promise(r => setTimeout(r, 5000));
         }
     }
     
-    // Final notification
     setTimeout(async () => {
-         await showPageNotification(activeTab.id, `Cover download process complete. Check your downloads.`, "success", 4000);
+         await showPageNotification(activeTab.id, `Cover download process complete. Check your downloads.`, "success", 5000);
     }, 1000);
 }
 

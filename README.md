@@ -97,6 +97,7 @@ This extension requests the following permissions, with explanations for why eac
 ## Known Issues & Limitations
 * The automated download and data-extraction features rely on specific CSS selectors and page structures on Bandcamp. If Bandcamp updates its website, these parts of the extension might need to be updated in `background.js`.
 * The timing delays (`setTimeout`) in the download automation are generalized. On very slow connections or machines, they might occasionally be too short, potentially missing an element that hasn't loaded yet.
+* Download Album Covers seems to fail some specific pages, I have no idea why, as the HTML is the exact same. It will be missing some covers.
 
 ## Future Ideas & Enhancements
 * User-configurable settings (e.g., for delays, output formats).
