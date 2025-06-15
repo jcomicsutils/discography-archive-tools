@@ -40,9 +40,12 @@ function getExtensionFromMimeType(mimeType) {
 
 function sanitizeFilename(name) {
     if (!name) return 'untitled';
-    // Replace invalid filename characters, remove trailing dots, and trim whitespace.
-    // Also replacing '|' with '-' for readability.
-    return name.replace(/ \| /g, ' - ').replace(/[\/\\?%*:|"<>]/g, '-').replace(/\.$/, '').trim();
+    // Replace invalid filename characters with a hyphen, then collapse multiple hyphens.
+    return name.replace(/ \| /g, ' - ')
+               .replace(/[\/\\?%*:|"<>]/g, '-')
+               .replace(/-+/g, '-') // Collapse multiple hyphens to one
+               .replace(/\.$/, '')
+               .trim();
 }
 
 
@@ -1170,7 +1173,13 @@ async function downloadAllAlbumCovers() {
                 const htmlText = await response.text();
 
                 const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
-                const pageTitle = titleMatch ? titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"') : "Untitled";
+                let pageTitle = titleMatch ? titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"') : "Untitled";
+                
+                // Truncate title for filename if it's over 50 characters
+                if (pageTitle.length > 50) {
+                    pageTitle = pageTitle.substring(0, 47) + '...';
+                }
+
                 const sanitizedAlbumTitle = sanitizeFilename(pageTitle);
 
                 const coverLinkMatch = htmlText.match(/<a class="popupImage" href="([^"]+)">/);
