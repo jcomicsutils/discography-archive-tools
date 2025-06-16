@@ -43,6 +43,7 @@ function sanitizeFilename(name) {
     // Replace invalid filename characters with a hyphen, then collapse multiple hyphens.
     return name.replace(/ \| /g, ' - ')
                .replace(/[\/\\?%*:|"<>]/g, '-')
+               .replace(/^\.+/, '') // Remove leading dots (ellipsis)
                .replace(/-+/g, '-') // Collapse multiple hyphens to one
                .replace(/\.$/, '')
                .trim();
@@ -1123,7 +1124,6 @@ async function downloadAllAlbumCovers() {
         });
         if (results && results[0]) {
             artistName = results[0];
-            console.log(`INFO: downloadAllAlbumCovers: Found artist name from page: "${artistName}"`);
         }
     } catch (e) {
         console.error("ERROR: downloadAllAlbumCovers: Failed to inject script to get artist name.", e);
@@ -1131,7 +1131,6 @@ async function downloadAllAlbumCovers() {
 
     if (!artistName) {
         artistName = urlMatch[1];
-        console.log(`INFO: downloadAllAlbumCovers: Falling back to subdomain for artist name: "${artistName}"`);
     }
 
     const folderName = sanitizeFilename(artistName) + " - Album Covers";
@@ -1172,43 +1171,31 @@ async function downloadAllAlbumCovers() {
                 }
                 const htmlText = await response.text();
 
-                // --- MODIFICATION START ---
                 let releaseTitle = "Untitled";
-                let releaseArtist = artistName; // Fallback to artist from main page
+                let releaseArtist = artistName; // Main artist name as fallback
 
                 const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
                 if (jsonMatch && jsonMatch[1]) {
                     try {
                         const jsonData = JSON.parse(jsonMatch[1]);
-                        if (jsonData.name) {
-                            releaseTitle = jsonData.name;
-                        }
-                        if (jsonData.byArtist && jsonData.byArtist.name) {
-                            releaseArtist = jsonData.byArtist.name;
-                        }
+                        if (jsonData.name) releaseTitle = jsonData.name;
+                        if (jsonData.byArtist && jsonData.byArtist.name) releaseArtist = jsonData.byArtist.name;
                     } catch (e) {
                         console.error(`ERROR: Failed to parse ld+json for ${url}, falling back to title tag.`, e);
-                        const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
-                        if (titleMatch && titleMatch[1]) {
-                            const fullTitle = titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"');
-                            const parts = fullTitle.split(/ \| |, by /);
-                            releaseTitle = parts[0].trim() || "Untitled";
-                            if (parts.length > 1) {
-                                releaseArtist = parts[parts.length - 1].trim();
-                            }
-                        }
                     }
-                } else {
-                    console.log(`INFO: No ld+json found for ${url}, falling back to title tag.`);
-                    const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
-                    if (titleMatch && titleMatch[1]) {
-                        const fullTitle = titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"');
-                        const parts = fullTitle.split(/ \| |, by /);
-                        releaseTitle = parts[0].trim() || "Untitled";
-                        if (parts.length > 1) {
-                            releaseArtist = parts[parts.length - 1].trim();
+                }
+                
+                if (releaseTitle === "Untitled" || releaseArtist === artistName) {
+                     const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
+                     if (titleMatch && titleMatch[1]) {
+                        const fullTitle = titleMatch[1].trim();
+                        const parts = fullTitle.split(/\s*\|\s*/);
+                        if (releaseTitle === "Untitled") releaseTitle = parts[0] || 'Untitled';
+                        if (releaseArtist === artistName) {
+                           if (parts.length === 3) releaseArtist = parts[1];
+                           else if (parts.length === 2) releaseArtist = parts[1];
                         }
-                    }
+                     }
                 }
 
                 let truncatedTitle = releaseTitle;
@@ -1293,6 +1280,144 @@ async function downloadAllAlbumCovers() {
     setTimeout(async () => {
          await showPageNotification(activeTab.id, `Cover download process complete. Check your downloads.`, "success", 5000);
     }, 1000);
+}
+
+async function downloadSingleAlbumCover(tab) {
+    console.log("INFO: downloadSingleAlbumCover: Starting function execution...");
+
+    if (!tab || !tab.id || !tab.url) {
+        console.error("ERROR: downloadSingleAlbumCover: No valid tab provided.");
+        await showPageNotification(null, "No valid tab found to download cover from.", "error");
+        return;
+    }
+
+    const albumOrTrackPageRegex = /bandcamp\.com\/(album|track)\//;
+    if (!albumOrTrackPageRegex.test(tab.url)) {
+        console.log(`INFO: downloadSingleAlbumCover: Active tab (${tab.url}) is not an album or track page.`);
+        await showPageNotification(tab.id, "This feature only works on an album or track page.", "error");
+        return;
+    }
+
+    await showPageNotification(tab.id, `Scanning page for cover...`, "success", 2000);
+
+    let releaseInfo;
+    try {
+        const results = await browser.tabs.executeScript(tab.id, {
+            code: `
+                (function() {
+                    let info = { trackTitle: null, trackArtist: null, pageArtist: null, coverUrl: null };
+
+                    // 1. Get Cover URL
+                    const coverLink = document.querySelector('#tralbumArt a.popupImage');
+                    if (coverLink) info.coverUrl = coverLink.href;
+
+                    // 2. Get data from ld+json, which separates track, artist, and publisher
+                    const jsonScript = document.querySelector('script[type="application/ld+json"]');
+                    if (jsonScript) {
+                        try {
+                            const jsonData = JSON.parse(jsonScript.textContent);
+                            if (jsonData.name) info.trackTitle = jsonData.name;
+                            if (jsonData.byArtist && jsonData.byArtist.name) info.trackArtist = jsonData.byArtist.name;
+                            if (jsonData.publisher && jsonData.publisher.name) info.pageArtist = jsonData.publisher.name;
+                        } catch (e) { console.error('INJECTED_ERROR: Failed to parse ld+json', e); }
+                    }
+
+                    // 3. Fallback for Page Artist (Publisher) from the bio section
+                    if (!info.pageArtist) {
+                        const bandNameEl = document.querySelector('#band-name-location .title');
+                        if (bandNameEl) info.pageArtist = bandNameEl.textContent.trim();
+                    }
+                    
+                    // 4. Fallback for Track info from the page title tag
+                    if (!info.trackTitle || !info.trackArtist) {
+                        const titleTag = document.querySelector('title');
+                        if (titleTag) {
+                            const fullTitle = titleTag.textContent.trim();
+                            const parts = fullTitle.split(/\\s*\\|\\s*/);
+                            if (!info.trackTitle) info.trackTitle = parts[0] || 'Untitled';
+                            if (!info.trackArtist) {
+                                if (parts.length >= 2) info.trackArtist = parts[1];
+                                else info.trackArtist = info.pageArtist; // Last resort: use page artist for track artist
+                            }
+                        }
+                    }
+                    return info;
+                })();
+            `
+        });
+        if (results && results[0]) releaseInfo = results[0];
+    } catch (e) {
+        console.error("ERROR: downloadSingleAlbumCover: Failed to execute script.", e);
+        await showPageNotification(tab.id, "Error getting release info from page.", "error");
+        return;
+    }
+
+    if (!releaseInfo || !releaseInfo.coverUrl || !releaseInfo.trackTitle || !releaseInfo.trackArtist || !releaseInfo.pageArtist) {
+        await showPageNotification(tab.id, "Could not determine all required info (title, artists, cover).", "error");
+        return;
+    }
+
+    const { trackTitle, trackArtist, pageArtist, coverUrl } = releaseInfo;
+    
+    // Use the PAGE artist for the folder name
+    const sanitizedPageArtist = sanitizeFilename(pageArtist);
+    const folderName = `${sanitizedPageArtist} - Album Covers`;
+
+    // Use the TRACK artist for the file name
+    let truncatedTitle = trackTitle;
+    if (truncatedTitle.length > 100) {
+        truncatedTitle = truncatedTitle.substring(0, 90) + '(...)';
+    }
+    const sanitizedAlbumTitle = sanitizeFilename(`${truncatedTitle} - ${trackArtist}`);
+
+    try {
+        const urlObj = new URL(coverUrl);
+        const urlPathParts = urlObj.pathname.split('/');
+        const originalFileNameWithExt = urlPathParts[urlPathParts.length - 1];
+        const dotIndex = originalFileNameWithExt.lastIndexOf('.');
+        const fileNameNoExt = (dotIndex > 0) ? originalFileNameWithExt.substring(0, dotIndex) : originalFileNameWithExt;
+        const lastUnderscoreIdx = fileNameNoExt.lastIndexOf('_');
+
+        if (lastUnderscoreIdx === -1) {
+            const fallbackExtMatch = coverUrl.match(/\\.([^.]+)$/);
+            const fallbackExt = fallbackExtMatch ? fallbackExtMatch[1] : 'jpg';
+            const fallbackFilename = `${folderName}/${sanitizedAlbumTitle}.${fallbackExt}`;
+            browser.downloads.download({ url: coverUrl, filename: fallbackFilename, conflictAction: 'uniquify' });
+            return;
+        }
+
+        const numberPart = fileNameNoExt.substring(0, lastUnderscoreIdx);
+        const baseImgDomainPath = urlObj.protocol + '//' + urlObj.hostname + (urlObj.port ? ':' + urlObj.port : '') + urlPathParts.slice(0, -1).join('/') + '/';
+        const highResImageUrl = baseImgDomainPath + numberPart + "_0";
+        let detectedExtension = 'jpg';
+
+        try {
+            let headResponse = await fetch(highResImageUrl, { method: 'HEAD' });
+            let contentType = headResponse.headers.get('Content-Type');
+            if (!headResponse.ok || !contentType || !contentType.startsWith('image/')) {
+                const getResponse = await fetch(highResImageUrl);
+                if (getResponse.ok) contentType = (await getResponse.blob()).type;
+            }
+            if (contentType && contentType.startsWith('image/')) {
+                detectedExtension = getExtensionFromMimeType(contentType);
+            }
+        } catch (fetchError) {
+            console.error(`ERROR: Network error determining extension:`, fetchError);
+        }
+
+        const finalFilename = `${folderName}/${sanitizedAlbumTitle}.${detectedExtension}`;
+        browser.downloads.download({ url: highResImageUrl, filename: finalFilename, conflictAction: 'uniquify' })
+            .then(
+                id => { if (id) showPageNotification(tab.id, `Cover download started!`, "success"); },
+                err => {
+                    console.error(`ERROR: Download failed for ${finalFilename}:`, err);
+                    showPageNotification(tab.id, `Failed to download cover.`, "error");
+                }
+            );
+    } catch (e) {
+        console.error("ERROR: An unexpected error occurred in downloadSingleAlbumCover.", e);
+        await showPageNotification(tab.id, "An unexpected error occurred.", "error");
+    }
 }
 
 async function copyDownloadPageLinks() {
@@ -1667,6 +1792,7 @@ browser.runtime.onInstalled.addListener(async (details) => {
     browser.contextMenus.create({ id: "copy-releases-links", parentId: "bandcamp-tools", title: "Copy Releases Links", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
     browser.contextMenus.create({ id: "download-album-covers", parentId: "bandcamp-tools", title: "Download Album Covers", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
     browser.contextMenus.create({ id: "download-images", parentId: "bandcamp-tools", title: "Download Images (Artist, Header, BG)", contexts: ["page", "image"], documentUrlPatterns: [ "*://*.bandcamp.com/album/*", "*://*.bandcamp.com/track/*", "*://*.bandcamp.com/music", "*://*.bandcamp.com/music?*", "*://*.bandcamp.com/" ] });
+    browser.contextMenus.create({ id: "download-single-cover", parentId: "bandcamp-tools", title: "Download This Album's Cover", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/album/*", "*://*.bandcamp.com/track/*"] });
     
     // New menu for Archive.org
     browser.contextMenus.create({ id: "archive-org-tools", title: "Archive.org Tools", contexts: ["page"], documentUrlPatterns: ["*://archive.org/download/*"] });
@@ -1715,6 +1841,11 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
     case "download-album-covers":
         await downloadAllAlbumCovers();
         break;
+    case "download-single-cover":
+      if (notificationTab) {
+          await downloadSingleAlbumCover(notificationTab);
+      }
+      break;    
     case "download-images":
       if (notificationTab) {
           downloadBandcampPageImage(notificationTab);
@@ -1773,6 +1904,20 @@ browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
             case "downloadAlbumCovers":
                 await downloadAllAlbumCovers();
                 break;
+            case "downloadSingleCover":
+                try {
+                    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+                    if (tabs.length > 0 && tabs[0].id && isActiveTab(tabs[0], "DownloadSingleCoverPopup")) {
+                        downloadSingleAlbumCover(tabs[0]);
+                    } else {
+                        console.log("INFO: DownloadSingleCover (Popup): No suitable active tab found.");
+                        await showPageNotification(null, "No active Bandcamp album/track tab found.", "error");
+                    }
+                } catch (err) {
+                    console.error("ERROR: DownloadSingleCover (Popup): Error querying active tab:", err);
+                    await showPageNotification(null, "Error finding active tab.", "error");
+                }
+                break;    
             case "copyReleasesLinks":
                 await copyReleasesLinks();
                 break;

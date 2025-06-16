@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const onBandcampAny = currentUrl.includes('bandcamp.com');
         // Regex for artist/main music page, which is required for certain actions.
         const onBandcampArtist = onBandcampAny && /^https?:\/\/([^\/]+)\.bandcamp\.com\/(music\/?|[?#]|$)/.test(currentUrl);
+        // Regex for album or track pages.
+        const onBandcampAlbumTrack = onBandcampAny && /bandcamp\.com\/(album|track)\//.test(currentUrl);
 
         const menuItems = document.querySelectorAll('#popup-menu li');
 
@@ -24,6 +26,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     break;
                 case 'bandcamp-artist': // These buttons require being on a specific Bandcamp artist page.
                     if (onBandcampArtist) shouldShow = true;
+                    break;
+                case 'bandcamp-album-track': // This button requires being on a Bandcamp album or track page.
+                    if (onBandcampAlbumTrack) shouldShow = true;
                     break;
                 case 'archive': // This button requires being on an Archive.org download page.
                     if (onArchive) shouldShow = true;
@@ -54,6 +59,7 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'copyNypTitlesUrlsBtn', action: 'copyNypTitlesUrls' },
         { id: 'copyPaidTitlesUrlsBtn', action: 'copyPaidTitlesUrls' },
         { id: 'downloadImagesBtn', action: 'downloadImages' },
+        { id: 'downloadSingleCoverBtn', action: 'downloadSingleCover' },
         { id: 'downloadAlbumCoversBtn', action: 'downloadAlbumCovers' },
         { id: 'copyReleasesLinksBtn', action: 'copyReleasesLinks' },
         { id: 'copyReleasesAndTitlesBtn', action: 'copyReleasesAndTitles' },

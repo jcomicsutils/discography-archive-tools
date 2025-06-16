@@ -1,5 +1,13 @@
 # Changelog
 
+### 2025-06-16
+#### Added
+ - New option on album/track pages to download only that specific cover, using the same folder structure and filename formatting as the "Download All" feature.
+#### Fixed
+ - (Hopefully) Corrected a major bug in both "Download This Cover" and "Download Album Covers" that caused downloads to fail.
+ - Enhanced filename sanitization to handle titles with problematic leading characters (e.g., ellipses), preventing download failures.
+
+---
 ### 2025-06-15
 #### Added
  - New feature to copy file lists from `archive.org` download pages.
