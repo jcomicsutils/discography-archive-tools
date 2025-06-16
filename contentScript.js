@@ -12,7 +12,7 @@
       const txt = nypSpan.textContent.trim().toLowerCase();
       // If this span contains "name your price" or "free download", classify as 'nyp'
       // ('nyp' is treated as non-paid by your background.js script)
-      if (txt === 'name your price' || txt === 'free download') {
+      if (txt === 'name your price' || txt === 'free download' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
         classification = 'nyp';
       }
     }
@@ -25,7 +25,7 @@
         const buttonTxt = freeDownloadButton.textContent.trim().toLowerCase();
         // If the button text is "free download", classify as 'free'
         // ('free' is also treated as non-paid by your background.js script)
-        if (buttonTxt === 'free download') {
+        if (buttonTxt === 'free download' || txt === '無料ダウンロード') {
           classification = 'free';
         }
         // Other button texts like "Buy Now" would not change the classification from 'paid'

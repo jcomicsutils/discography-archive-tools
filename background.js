@@ -738,7 +738,7 @@ async function copyTitlesAndUrls(requestedType) {
                     
                     if (nypMatch && nypMatch[1]) {
                         const txt = nypMatch[1].trim().toLowerCase();
-                        if (txt === 'name your price' || txt === 'free download') {
+                        if (txt === 'name your price' || txt === 'free download' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
                             classification = 'nyp';
                         }
                     } else {
