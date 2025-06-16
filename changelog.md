@@ -2,8 +2,10 @@
 
 ### 2025-06-15
 #### Added
+ - New feature to copy file lists from `archive.org` download pages.
  - Changelog
 #### Changed
+- Improved the popup menu logic to make global actions always visible while keeping page-specific buttons context-sensitive.
 - Updated filename sanitization to replace invalid characters with hyphens and collapse multiple hyphens into one.
 - Album cover filenames for titles longer than 50 characters are now automatically truncated to prevent errors.
 

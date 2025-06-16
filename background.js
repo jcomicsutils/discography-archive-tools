@@ -1534,6 +1534,69 @@ async function copyReleasesAndTitles() {
     }
 }
 
+async function copyArchiveTableFiles() {
+    console.log("INFO: copyArchiveTableFiles: Starting function execution...");
+    let activeTab;
+    try {
+        [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+    } catch (e) {
+        console.error("ERROR: copyArchiveTableFiles: Could not get active tab.", e);
+        return;
+    }
+
+    if (!activeTab || !activeTab.id || !activeTab.url) {
+        console.error("ERROR: copyArchiveTableFiles: No active tab or URL found.");
+        return;
+    }
+
+    const archivePageRegex = /^https?:\/\/archive\.org\/download\/.+/;
+    if (!archivePageRegex.test(activeTab.url)) {
+        console.log(`INFO: copyArchiveTableFiles: Active tab (${activeTab.url}) is not an archive.org download page.`);
+        await showPageNotification(activeTab.id, "This feature only works on archive.org download pages.", "error");
+        return;
+    }
+
+    await showPageNotification(activeTab.id, "Scanning for file table...", "success", 2000);
+
+    let fileNames;
+    try {
+        const results = await browser.tabs.executeScript(activeTab.id, {
+            code: `
+                (function() {
+                    const table = document.querySelector('table.directory-listing-table');
+                    if (!table) {
+                        return null;
+                    }
+                    // Use textContent to get the visible name, which correctly handles decoded characters and directory slashes.
+                    const names = Array.from(table.querySelectorAll('tbody tr td:first-child a'))
+                        .map(a => a.textContent.trim());
+                    return names;
+                })();
+            `
+        });
+        fileNames = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
+    } catch (e) {
+        console.error("ERROR: copyArchiveTableFiles: Failed to inject script to scrape table.", e);
+        await showPageNotification(activeTab.id, "Error scanning page for table.", "error");
+        return;
+    }
+
+    if (fileNames.length === 0) {
+        console.log("INFO: copyArchiveTableFiles: No file names found in the table.");
+        await showPageNotification(activeTab.id, "No file names found in the table.", "error");
+        return;
+    }
+
+    const outputString = fileNames.join('\n');
+    const copySuccess = await copyTextToClipboard(outputString);
+
+    if (copySuccess) {
+        await showPageNotification(activeTab.id, `${fileNames.length} file name(s) copied!`, "success");
+    } else {
+        await showPageNotification(activeTab.id, "Failed to copy file names.", "error");
+    }
+}
+
 async function copyTextToClipboard(text) {
     try { if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') { await navigator.clipboard.writeText(text); console.log('SUCCESS: Text successfully copied to clipboard using navigator.clipboard!'); return true; } } catch (err) { console.warn('WARN: navigator.clipboard.writeText failed, trying fallback:', err); }
     console.log('INFO: Attempting to copy to clipboard using document.execCommand fallback.');
@@ -1567,6 +1630,11 @@ browser.runtime.onInstalled.addListener(async (details) => {
     browser.contextMenus.create({ id: "copy-releases-links", parentId: "bandcamp-tools", title: "Copy Releases Links", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
     browser.contextMenus.create({ id: "download-album-covers", parentId: "bandcamp-tools", title: "Download Album Covers", contexts: ["page"], documentUrlPatterns: ["*://*.bandcamp.com/*"] });
     browser.contextMenus.create({ id: "download-images", parentId: "bandcamp-tools", title: "Download Images (Artist, Header, BG)", contexts: ["page", "image"], documentUrlPatterns: [ "*://*.bandcamp.com/album/*", "*://*.bandcamp.com/track/*", "*://*.bandcamp.com/music", "*://*.bandcamp.com/music?*", "*://*.bandcamp.com/" ] });
+    
+    // New menu for Archive.org
+    browser.contextMenus.create({ id: "archive-org-tools", title: "Archive.org Tools", contexts: ["page"], documentUrlPatterns: ["*://archive.org/download/*"] });
+    browser.contextMenus.create({ id: "copy-archive-table-files", parentId: "archive-org-tools", title: "Copy File List from Table", contexts: ["page"], documentUrlPatterns: ["*://archive.org/download/*"] });
+
     console.log("INFO: background.js: All context menus registration attempt complete.");
   } catch (e) { console.error("ERROR: background.js: Major failure during context menu creation in onInstalled:", e); }
 });
@@ -1620,7 +1688,10 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
       break;
     case "copy-download-page-links":
         await copyDownloadPageLinks();
-        break;      
+        break;
+    case "copy-archive-table-files":
+        await copyArchiveTableFiles();
+        break;
     default:
       console.warn(`WARN: Unknown context menu item ID: ${info.menuItemId}`);
   }
@@ -1673,6 +1744,9 @@ browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
                 break;
             case "copyDownloadPageLinks": 
                 await copyDownloadPageLinks();
+                break;
+            case "copyArchiveTableFiles":
+                await copyArchiveTableFiles();
                 break;
             default:
                 console.warn(`WARN: Unknown action received from popup: ${message.action}`);

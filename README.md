@@ -18,7 +18,7 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 * **Rate-Limiting Prevention**: For artist-page functions that scan many releases (like copying tags or downloading covers), a delay is automatically introduced on very large discographies (>100 releases) to prevent server errors.
 
 * **On-Page Notifications**:
-    * Receive brief, auto-fading notifications directly on your current Bandcamp page (typically in the bottom-right corner) for feedback on actions like "Tabs Sorted!" or "Tags Copied!".
+    * Receive brief, auto-fading notifications directly on your current Bandcamp page (typically in the bottom-right corner, but it can gitch sometimes) for feedback on actions like "Tabs Sorted!" or "Tags Copied!".
 
 * **Sort Bandcamp Tabs**: Automatically sorts your open Bandcamp album/track tabs in the current window, placing "Paid" items to the left and "Name Your Price" (NYP) / "Free" items to the right.
 
@@ -49,6 +49,8 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 
 * **Copy Paid Titles & URLs**: Similar to the above, but specifically targets releases classified as "Paid," collecting and formatting their titles and URLs for clipboard copying from either an artist's page or your open tabs.
 
+* **Copy Archive.org File List**: On an Archive.org download page (`archive.org/download/*`), this feature finds the main file table and copies the "Name" column to your clipboard, providing a clean list of all files and folders.
+
 ## How to Use
 
 1.  **Installation (for Development/Local Use):**
@@ -59,10 +61,10 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 
 2.  **Accessing Features:**
     * Click the extension icon and select the desired feature; Or
-    * Navigate to any Bandcamp album page (`*.bandcamp.com/album/*`) or track page (`*.bandcamp.com/track/*`).
+    * Navigate to any Bandcamp page or Archive.org download page.
     * Right-click anywhere on the page to open the context menu.
-    * Look for the "Bandcamp Tools" submenu.
-    * Select the desired action (e.g., "Sort Tabs," "Copy All Tags to Clipboard," etc.).
+    * Look for the "Bandcamp Tools" or "Archive.org Tools" submenu.
+    * Select the desired action.
 
 ## Files Overview
 
@@ -82,11 +84,14 @@ This extension requests the following permissions, with explanations for why eac
     * To execute scripts within these tabs (e.g., `contentScript.js` for classification, or other scripts for download automation and data extraction).
     * To reorder (sort) tabs.
 * **`contextMenus`**:
-    * To add the "Bandcamp Tools" menu and its sub-options to the right-click context menu on web pages.
+    * To add the "Bandcamp Tools" and "Archive.org Tools" menus and their sub-options to the right-click context menu on web pages.
 * **`*://*.bandcamp.com/*`**:
     * To allow the extension to run its `contentScript.js` specifically on Bandcamp pages.
     * To enable `executeScript` and `fetch` calls to target Bandcamp pages for various functions.
     * To ensure context menu items appear only on Bandcamp domains.
+* **`*://archive.org/download/*`**:
+    * To allow the extension to run scripts on Archive.org download pages to copy file lists.
+    * To ensure context menu items for Archive.org appear only on those pages.
 * **`clipboardWrite`**:
     * To allow the extension to copy the collected tags, titles, and URLs directly to your system clipboard for easy pasting into other applications.
 * **`downloads`**:

@@ -13,18 +13,19 @@
 
         <div id="mainMenuSection" class="active-section">
             <ul id="popup-menu">
-                <li><button id="sortTabsBtn">Sort Tabs</button></li>
-                <li><button id="clickDownloadBtn">Download NYP/Free</button></li>
-                <li><button id="copyKeywordsBtn">Copy Tags</button></li>
-                <li><button id="copyNypTitlesUrlsBtn">Copy NYP/Free Titles & URLs</button></li>
-                <li><button id="copyPaidTitlesUrlsBtn">Copy Paid Titles & URLs</button></li>
-                <li><button id="downloadImagesBtn">Download Images</button></li>
-                <li><button id="downloadAlbumCoversBtn">Download Album Covers</button></li>
-                <li class="compound-button-li">
+                <li data-context="global"><button id="sortTabsBtn">Sort Tabs</button></li>
+                <li data-context="global"><button id="clickDownloadBtn">Download NYP/Free</button></li>
+                <li data-context="global"><button id="copyKeywordsBtn">Copy Tags</button></li>
+                <li data-context="global"><button id="copyNypTitlesUrlsBtn">Copy NYP/Free Titles & URLs</button></li>
+                <li data-context="global"><button id="copyPaidTitlesUrlsBtn">Copy Paid Titles & URLs</button></li>
+                <li data-context="bandcamp-any"><button id="downloadImagesBtn">Download Images</button></li>
+                <li data-context="bandcamp-artist"><button id="downloadAlbumCoversBtn">Download Album Covers</button></li>
+                <li data-context="bandcamp-artist" class="compound-button-li">
                     <button id="copyReleasesLinksBtn" class="main-action">Copy Releases Links</button>
                     <button id="copyReleasesAndTitlesBtn" class="sub-action" title="Copy Releases Links & Titles">&amp; Titles</button>
                 </li>
-                <li><button id="copyDownloadPageLinksBtn">Copy Download Links</button></li>
+                <li data-context="global"><button id="copyDownloadPageLinksBtn">Copy Download Links</button></li>
+                <li data-context="archive"><button id="copyArchiveTableFilesBtn">Copy Archive.org Files</button></li>
             </ul>
         </div>
 

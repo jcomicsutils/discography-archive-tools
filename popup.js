@@ -1,6 +1,45 @@
 // popup.js
 document.addEventListener('DOMContentLoaded', function () {
-    // Generic message sender for actions - now all actions will just close the popup
+    // This logic runs first to set the visibility of menu items based on the current page context.
+    browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+        const currentUrl = (tabs && tabs.length > 0) ? tabs[0].url : '';
+
+        const onArchive = currentUrl.includes('archive.org/download/');
+        const onBandcampAny = currentUrl.includes('bandcamp.com');
+        // Regex for artist/main music page, which is required for certain actions.
+        const onBandcampArtist = onBandcampAny && /^https?:\/\/([^\/]+)\.bandcamp\.com\/(music\/?|[?#]|$)/.test(currentUrl);
+
+        const menuItems = document.querySelectorAll('#popup-menu li');
+
+        menuItems.forEach(li => {
+            const context = li.getAttribute('data-context');
+            let shouldShow = false;
+
+            switch (context) {
+                case 'global': // These buttons work regardless of the current page.
+                    shouldShow = true;
+                    break;
+                case 'bandcamp-any': // These buttons require being on any Bandcamp page.
+                    if (onBandcampAny) shouldShow = true;
+                    break;
+                case 'bandcamp-artist': // These buttons require being on a specific Bandcamp artist page.
+                    if (onBandcampArtist) shouldShow = true;
+                    break;
+                case 'archive': // This button requires being on an Archive.org download page.
+                    if (onArchive) shouldShow = true;
+                    break;
+            }
+
+            // Set the display style. The default is handled by the stylesheet.
+            li.style.display = shouldShow ? '' : 'none';
+        });
+
+    }).catch(error => {
+        console.error("Error setting up popup UI:", error);
+    });
+
+
+    // Generic message sender for actions
     function sendActionAndClose(actionName) {
         browser.runtime.sendMessage({ action: actionName })
             .catch(error => console.error(`Error sending message for action "${actionName}":`, error));
@@ -18,7 +57,8 @@ document.addEventListener('DOMContentLoaded', function () {
         { id: 'downloadAlbumCoversBtn', action: 'downloadAlbumCovers' },
         { id: 'copyReleasesLinksBtn', action: 'copyReleasesLinks' },
         { id: 'copyReleasesAndTitlesBtn', action: 'copyReleasesAndTitles' },
-        { id: 'copyDownloadPageLinksBtn', action: 'copyDownloadPageLinks' }
+        { id: 'copyDownloadPageLinksBtn', action: 'copyDownloadPageLinks' },
+        { id: 'copyArchiveTableFilesBtn', action: 'copyArchiveTableFiles' }
     ];
 
     actionButtonMappings.forEach(buttonInfo => {
@@ -27,8 +67,6 @@ document.addEventListener('DOMContentLoaded', function () {
             buttonElement.addEventListener('click', function() {
                 sendActionAndClose(buttonInfo.action);
             });
-        } else {
-            console.warn(`Action button with ID "${buttonInfo.id}" not found in popup.html`);
         }
     });
 
@@ -61,6 +99,7 @@ document.addEventListener('DOMContentLoaded', function () {
             saFormatEnabledInput.checked = result.saFormatEnabled;
         }).catch(error => {
             console.error('Popup: Error loading settings:', error);
+            // Fallback to defaults
             emailInput.value = defaultSettings.email;
             zipcodeInput.value = defaultSettings.zipcode;
             notificationsEnabledInput.checked = defaultSettings.notificationsEnabled;
@@ -113,10 +152,5 @@ document.addEventListener('DOMContentLoaded', function () {
                     console.error('Popup: Error saving settings:', error);
                 });
         });
-    }
-
-    if (mainMenuSection && optionsSection && !optionsAreVisible) {
-        mainMenuSection.classList.add('active-section');
-        optionsSection.classList.add('hidden-section');
     }
 });
