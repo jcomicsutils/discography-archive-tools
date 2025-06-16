@@ -1172,15 +1172,52 @@ async function downloadAllAlbumCovers() {
                 }
                 const htmlText = await response.text();
 
-                const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
-                let pageTitle = titleMatch ? titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"') : "Untitled";
-                
-                // Truncate title for filename if it's over 50 characters
-                if (pageTitle.length > 50) {
-                    pageTitle = pageTitle.substring(0, 47) + '...';
+                // --- MODIFICATION START ---
+                let releaseTitle = "Untitled";
+                let releaseArtist = artistName; // Fallback to artist from main page
+
+                const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
+                if (jsonMatch && jsonMatch[1]) {
+                    try {
+                        const jsonData = JSON.parse(jsonMatch[1]);
+                        if (jsonData.name) {
+                            releaseTitle = jsonData.name;
+                        }
+                        if (jsonData.byArtist && jsonData.byArtist.name) {
+                            releaseArtist = jsonData.byArtist.name;
+                        }
+                    } catch (e) {
+                        console.error(`ERROR: Failed to parse ld+json for ${url}, falling back to title tag.`, e);
+                        const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
+                        if (titleMatch && titleMatch[1]) {
+                            const fullTitle = titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+                            const parts = fullTitle.split(/ \| |, by /);
+                            releaseTitle = parts[0].trim() || "Untitled";
+                            if (parts.length > 1) {
+                                releaseArtist = parts[parts.length - 1].trim();
+                            }
+                        }
+                    }
+                } else {
+                    console.log(`INFO: No ld+json found for ${url}, falling back to title tag.`);
+                    const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
+                    if (titleMatch && titleMatch[1]) {
+                        const fullTitle = titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+                        const parts = fullTitle.split(/ \| |, by /);
+                        releaseTitle = parts[0].trim() || "Untitled";
+                        if (parts.length > 1) {
+                            releaseArtist = parts[parts.length - 1].trim();
+                        }
+                    }
                 }
 
-                const sanitizedAlbumTitle = sanitizeFilename(pageTitle);
+                let truncatedTitle = releaseTitle;
+                if (truncatedTitle.length > 100) {
+                    truncatedTitle = truncatedTitle.substring(0, 90) + '(...)';
+                }
+                
+                const finalAlbumFilename = `${truncatedTitle} - ${releaseArtist}`;
+                const sanitizedAlbumTitle = sanitizeFilename(finalAlbumFilename);
 
                 const coverLinkMatch = htmlText.match(/<a class="popupImage" href="([^"]+)">/);
                 if (!coverLinkMatch || !coverLinkMatch[1]) {
