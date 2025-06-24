@@ -40,8 +40,12 @@ function getExtensionFromMimeType(mimeType) {
 
 function sanitizeFilename(name) {
     if (!name) return 'untitled';
-    // Replace invalid filename characters with a hyphen, then collapse multiple hyphens.
-    return name.replace(/ \| /g, ' - ')
+    // First, remove invisible characters and control characters.
+    // This regex targets ASCII control characters and common Unicode formatting/invisible characters.
+    const cleanName = name.replace(/[\x00-\x1F\x7F\u200B-\u200D\uFEFF]/g, '');
+
+    // Then, replace invalid filename characters with a hyphen, then collapse multiple hyphens.
+    return cleanName.replace(/ \| /g, ' - ')
                .replace(/[\/\\?%*:|"<>]/g, '-')
                .replace(/^\.+/, '') // Remove leading dots (ellipsis)
                .replace(/-+/g, '-') // Collapse multiple hyphens to one
@@ -1203,7 +1207,7 @@ async function downloadAllAlbumCovers() {
                     truncatedTitle = truncatedTitle.substring(0, 90) + '(...)';
                 }
                 
-                const finalAlbumFilename = `${truncatedTitle} - ${releaseArtist}`;
+                const finalAlbumFilename = `${releaseArtist} - ${truncatedTitle}`;
                 const sanitizedAlbumTitle = sanitizeFilename(finalAlbumFilename);
 
                 const coverLinkMatch = htmlText.match(/<a class="popupImage" href="([^"]+)">/);
@@ -1368,7 +1372,7 @@ async function downloadSingleAlbumCover(tab) {
     if (truncatedTitle.length > 100) {
         truncatedTitle = truncatedTitle.substring(0, 90) + '(...)';
     }
-    const sanitizedAlbumTitle = sanitizeFilename(`${truncatedTitle} - ${trackArtist}`);
+    const sanitizedAlbumTitle = sanitizeFilename(`${trackArtist} - ${truncatedTitle}`);
 
     try {
         const urlObj = new URL(coverUrl);
