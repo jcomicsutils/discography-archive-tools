@@ -47,6 +47,7 @@ function sanitizeFilename(name) {
     // Then, replace invalid filename characters with a hyphen, then collapse multiple hyphens.
     return cleanName.replace(/ \| /g, ' - ')
                .replace(/[\/\\?%*:|"<>]/g, '-')
+               .replace(/ +/g, ' ') // Collapse multiple spaces into one
                .replace(/^\.+/, '') // Remove leading dots (ellipsis)
                .replace(/-+/g, '-') // Collapse multiple hyphens to one
                .replace(/\.$/, '')

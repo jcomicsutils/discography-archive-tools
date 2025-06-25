@@ -3,7 +3,10 @@
 ### 2025-06-24
 #### Fixed
  - Improved filename sanitization to remove invisible characters (e.g., zero-width spaces) from titles, which previously caused downloads for certain albums to fail. This affects both "Download Album Covers" and "Download This Album's Cover" features.
+#### Changed
+ - Filename sanitization now collapses multiple consecutive spaces into a single space.
 
+---
 ### 2025-06-16
 #### Added
  - New option on album/track pages to download only that specific cover, using the same folder structure and filename formatting as the "Download All" feature.
