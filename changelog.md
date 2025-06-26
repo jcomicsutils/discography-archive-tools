@@ -1,5 +1,12 @@
 # Changelog
 
+### 2025-06-26
+#### Changed
+ - Implemented a comprehensive caching system for artist-page functions.
+ - When using "Copy Tags", "Copy NYP/Free", "Copy Paid", or "Download Album Covers", the extension now fetches all necessary data (tags, classification, title, cover URL) at once and stores it.
+ - Subsequent uses of any of these functions will pull from the cache instead of re-fetching pages, improving speed and reducing network requests.
+
+---
 ### 2025-06-24
 #### Fixed
  - Improved filename sanitization to remove invisible characters (e.g., zero-width spaces) from titles, which previously caused downloads for certain albums to fail. This affects both "Download Album Covers" and "Download This Album's Cover" features.

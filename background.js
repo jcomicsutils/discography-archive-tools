@@ -2,6 +2,8 @@
 console.log("INFO: background.js: Script loading...");
 
 // Object to store classifications received from content scripts
+let pageDataCache = {};
+let isStopRequested = false; 
 let classifications = {};
 
 // Helper function to check if a tab is active and not discarded
@@ -506,7 +508,7 @@ async function copyAllKeywordsToClipboard() {
             return;
         }
 
-        await showPageNotification(notificationTabId, `Found ${albumUrls.length} releases. Fetching tags in batches...`, "success", 3000);
+        await showPageNotification(notificationTabId, `Found ${albumUrls.length} releases. Fetching data in batches...`, "success", 3000);
         
         const BATCH_SIZE = 10;
         let allKeywordsCollected = [];
@@ -515,62 +517,85 @@ async function copyAllKeywordsToClipboard() {
         for (let i = 0; i < albumUrls.length; i += BATCH_SIZE) {
             const batchUrls = albumUrls.slice(i, i + BATCH_SIZE);
             
-            const batchPromises = batchUrls.map(url => 
-                fetch(url)
-                    .then(response => {
-                        if (!response.ok) {
-                            console.warn(`WARN: Fetch failed for ${url} with status ${response.status}`);
-                            return null;
-                        }
-                        return response.text();
-                    })
-                    .catch(e => {
-                        console.error(`ERROR: Failed to fetch ${url}:`, e);
-                        return null;
-                    })
-            );
+            const batchPromises = batchUrls.map(async (url) => {
+                // If data is missing (keywords or classification), fetch the page.
+                if (!pageDataCache[url] || pageDataCache[url].keywords === undefined || pageDataCache[url].classification === undefined) {
+                    try {
+                        const response = await fetch(url);
+                        if (!response.ok) return;
+                        const htmlText = await response.text();
+                        
+                        // Initialize cache object for this URL if it doesn't exist
+                        if (!pageDataCache[url]) pageDataCache[url] = {};
 
-            const htmlTexts = await Promise.all(batchPromises);
-
-            for (const htmlText of htmlTexts) {
-                if (!htmlText) continue;
-
-                try {
-                    const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
-                    if (jsonMatch && jsonMatch[1]) {
-                        const jsonData = JSON.parse(jsonMatch[1]);
+                        // --- 1. Get Keywords ---
+                        const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
                         let tempKeywords = [];
-                        if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) {
-                           tempKeywords = jsonData.keywords;
-                       } else if (jsonData && jsonData.albumRelease && Array.isArray(jsonData.albumRelease) && jsonData.albumRelease.length > 0 && jsonData.albumRelease[0].keywords && Array.isArray(jsonData.albumRelease[0].keywords)) {
-                           tempKeywords = jsonData.albumRelease[0].keywords;
-                       } else if (jsonData && jsonData.byArtist && jsonData.byArtist.keywords && Array.isArray(jsonData.byArtist.keywords)) {
-                            tempKeywords = jsonData.byArtist.keywords;
-                       } else if (jsonData && jsonData.publisher && jsonData.publisher.keywords && Array.isArray(jsonData.publisher.keywords)) {
-                            tempKeywords = jsonData.publisher.keywords;
-                       }
-                       if (tempKeywords.length > 0) {
-                           allKeywordsCollected.push(...tempKeywords.filter(kw => typeof kw === 'string'));
-                       }
+                        if (jsonMatch && jsonMatch[1]) {
+                            const jsonData = JSON.parse(jsonMatch[1]);
+                            if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) {
+                               tempKeywords = jsonData.keywords;
+                           } else if (jsonData && jsonData.albumRelease && Array.isArray(jsonData.albumRelease) && jsonData.albumRelease.length > 0 && jsonData.albumRelease[0].keywords && Array.isArray(jsonData.albumRelease[0].keywords)) {
+                               tempKeywords = jsonData.albumRelease[0].keywords;
+                           } else if (jsonData && jsonData.byArtist && jsonData.byArtist.keywords && Array.isArray(jsonData.byArtist.keywords)) {
+                                tempKeywords = jsonData.byArtist.keywords;
+                           } else if (jsonData && jsonData.publisher && jsonData.publisher.keywords && Array.isArray(jsonData.publisher.keywords)) {
+                                tempKeywords = jsonData.publisher.keywords;
+                           }
+                        }
+                        pageDataCache[url].keywords = tempKeywords.filter(kw => typeof kw === 'string');
+
+                        // --- 2. Get Title ---
+                        const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
+                        pageDataCache[url].title = titleMatch ? titleMatch[1].trim() : "Untitled";
+
+                        // --- 3. Get Classification ---
+                        let classification = 'paid';
+                        const nypMatch = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>[\s\S]*?<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
+                        if (nypMatch && nypMatch[1]) {
+                            const txt = nypMatch[1].trim().toLowerCase();
+                            if (txt === 'name your price' || txt === 'free download' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
+                                classification = 'nyp';
+                            }
+                        } else {
+                            const freeButtonMatch = htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
+                            if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download') {
+                               classification = 'free';
+                            }
+                        }
+                        pageDataCache[url].classification = classification;
+
+                    } catch(e) {
+                        console.error(`ERROR: Failed to fetch or process data for ${url}:`, e);
+                        if (!pageDataCache[url]) pageDataCache[url] = {};
+                        pageDataCache[url].keywords = []; 
+                        pageDataCache[url].classification = 'paid';
+                        pageDataCache[url].title = 'Error';
                     }
-                } catch(e) {
-                    console.error("ERROR: Failed to parse page content for tags:", e);
+                }
+            });
+
+            await Promise.all(batchPromises);
+            
+            // Now, build the keyword list from the (now populated) cache
+            for (const url of batchUrls) {
+                if(pageDataCache[url] && pageDataCache[url].keywords) {
+                    allKeywordsCollected.push(...pageDataCache[url].keywords);
                 }
             }
+
             pagesScanned += batchUrls.length;
-            console.log(`INFO: Finished batch. Total pages processed so far: ${pagesScanned}/${albumUrls.length}`);
             if (i + BATCH_SIZE < albumUrls.length) {
                 await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${albumUrls.length} releases...`, "success", 2000);
             }
             
             if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
-                console.log(`INFO: copyAllKeywordsToClipboard: More than 100 albums detected. Pausing for 5 seconds between batches.`);
                 await showPageNotification(notificationTabId, `(${pagesScanned}/${albumUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
                 await new Promise(r => setTimeout(r, 5000));
             }
         }
 
-        console.log(`INFO: copyAllKeywordsToClipboard: Finished all batches. Total keywords collected initially: ${allKeywordsCollected.length}`);
+        console.log(`INFO: copyAllKeywordsToClipboard: Finished all batches. Total keywords collected: ${allKeywordsCollected.length}`);
 
         if (allKeywordsCollected.length === 0) {
             await showPageNotification(notificationTabId, "No keywords found in any releases.", "error");
@@ -588,6 +613,7 @@ async function copyAllKeywordsToClipboard() {
         }
 
     } else {
+        // Fallback for scanning open tabs remains the same
         console.log("INFO: copyAllKeywordsToClipboard: Not an artist page. Falling back to method for scanning open tabs.");
         let allKeywordsCollected = [];
         let queriedTabs;
@@ -710,7 +736,7 @@ async function copyTitlesAndUrls(requestedType) {
             return;
         }
 
-        await showPageNotification(notificationTabId, `Found ${albumUrls.length} releases. Classifying in batches...`, "success", 3000);
+        await showPageNotification(notificationTabId, `Found ${albumUrls.length} releases. Fetching data in batches...`, "success", 3000);
         
         const BATCH_SIZE = 10;
         let outputLines = [];
@@ -719,53 +745,81 @@ async function copyTitlesAndUrls(requestedType) {
         for (let i = 0; i < albumUrls.length; i += BATCH_SIZE) {
             const batchUrls = albumUrls.slice(i, i + BATCH_SIZE);
             
-            const batchPromises = batchUrls.map(url => 
-                fetch(url)
-                    .then(response => response.ok ? response.text() : null)
-                    .then(htmlText => ({ url, htmlText }))
-                    .catch(e => {
-                        console.error(`ERROR: Failed to fetch ${url}:`, e);
-                        return { url, htmlText: null };
-                    })
-            );
+            const batchPromises = batchUrls.map(async (url) => {
+                // If data is missing (classification or keywords), fetch the page.
+                if (!pageDataCache[url] || pageDataCache[url].classification === undefined || pageDataCache[url].keywords === undefined) {
+                    try {
+                        const response = await fetch(url);
+                        if (!response.ok) return;
+                        const htmlText = await response.text();
+                        
+                        // Initialize cache object for this URL if it doesn't exist
+                        if (!pageDataCache[url]) pageDataCache[url] = {};
 
-            const results = await Promise.all(batchPromises);
+                        // --- 1. Get Title ---
+                        const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
+                        pageDataCache[url].title = titleMatch ? titleMatch[1].trim() : "Untitled";
 
-            for (const result of results) {
-                if (!result.htmlText) continue;
-
-                try {
-                    const titleMatch = result.htmlText.match(/<title>(.*?)<\/title>/);
-                    const title = titleMatch ? titleMatch[1].trim() : "Untitled";
-
-                    let classification = 'paid';
-                    const nypMatch = result.htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>[\s\S]*?<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
-                    
-                    if (nypMatch && nypMatch[1]) {
-                        const txt = nypMatch[1].trim().toLowerCase();
-                        if (txt === 'name your price' || txt === 'free download' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
-                            classification = 'nyp';
+                        // --- 2. Get Classification ---
+                        let classification = 'paid';
+                        const nypMatch = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>[\s\S]*?<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
+                        if (nypMatch && nypMatch[1]) {
+                            const txt = nypMatch[1].trim().toLowerCase();
+                            if (txt === 'name your price' || txt === 'free download' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
+                                classification = 'nyp';
+                            }
+                        } else {
+                            const freeButtonMatch = htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
+                            if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download') {
+                               classification = 'free';
+                            }
                         }
-                    } else {
-                        const freeButtonMatch = result.htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
-                        if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download') {
-                           classification = 'free';
+                        pageDataCache[url].classification = classification;
+
+                        // --- 3. Get Keywords ---
+                        const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
+                        let tempKeywords = [];
+                        if (jsonMatch && jsonMatch[1]) {
+                            const jsonData = JSON.parse(jsonMatch[1]);
+                            if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) {
+                               tempKeywords = jsonData.keywords;
+                           } else if (jsonData && jsonData.albumRelease && Array.isArray(jsonData.albumRelease) && jsonData.albumRelease.length > 0 && jsonData.albumRelease[0].keywords && Array.isArray(jsonData.albumRelease[0].keywords)) {
+                               tempKeywords = jsonData.albumRelease[0].keywords;
+                           } else if (jsonData && jsonData.byArtist && jsonData.byArtist.keywords && Array.isArray(jsonData.byArtist.keywords)) {
+                                tempKeywords = jsonData.byArtist.keywords;
+                           } else if (jsonData && jsonData.publisher && jsonData.publisher.keywords && Array.isArray(jsonData.publisher.keywords)) {
+                                tempKeywords = jsonData.publisher.keywords;
+                           }
                         }
+                        pageDataCache[url].keywords = tempKeywords.filter(kw => typeof kw === 'string');
+                        
+                    } catch (e) {
+                        console.error(`ERROR: Failed to fetch or process data for ${url}:`, e);
+                         if (!pageDataCache[url]) pageDataCache[url] = {};
+                        pageDataCache[url].keywords = []; 
+                        pageDataCache[url].classification = 'paid';
+                        pageDataCache[url].title = 'Error';
                     }
-                    
-                    let includePage = false;
-                    if (requestedType === 'nypFree' && (classification === 'nyp' || classification === 'free')) {
-                        includePage = true;
-                    } else if (requestedType === 'paid' && classification === 'paid') {
-                        includePage = true;
-                    }
-                    
-                    if (includePage) {
-                        outputLines.push(title);
-                        outputLines.push(result.url);
-                    }
-                } catch(e) {
-                    console.error("ERROR: Failed to parse content for " + result.url, e);
+                }
+            });
+
+            await Promise.all(batchPromises);
+
+            // Now, use the fully populated cache to build the output
+            for (const url of batchUrls) {
+                const data = pageDataCache[url];
+                if (!data || data.classification === undefined) continue;
+                
+                let includePage = false;
+                if (requestedType === 'nypFree' && (data.classification === 'nyp' || data.classification === 'free')) {
+                    includePage = true;
+                } else if (requestedType === 'paid' && data.classification === 'paid') {
+                    includePage = true;
+                }
+                
+                if (includePage) {
+                    outputLines.push(data.title || 'Untitled');
+                    outputLines.push(url);
                 }
             }
             pagesScanned += batchUrls.length;
@@ -774,7 +828,6 @@ async function copyTitlesAndUrls(requestedType) {
             }
             
             if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
-                console.log(`INFO: copyTitlesAndUrls: More than 100 albums detected. Pausing for 5 seconds between batches.`);
                 await showPageNotification(notificationTabId, `(${pagesScanned}/${albumUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
                 await new Promise(r => setTimeout(r, 5000));
             }
@@ -793,6 +846,7 @@ async function copyTitlesAndUrls(requestedType) {
         }
 
     } else {
+        // Fallback for scanning open tabs remains the same
         console.log(`INFO: copyTitlesAndUrls: Not an artist page. Falling back to method for scanning open tabs for type "${requestedType}".`);
         classifications = {};
         let outputLines = [];
@@ -1159,7 +1213,7 @@ async function downloadAllAlbumCovers() {
         return;
     }
 
-    await showPageNotification(activeTab.id, `Found ${releaseUrls.length} releases. Fetching covers...`, "success", 3000);
+    await showPageNotification(activeTab.id, `Found ${releaseUrls.length} releases. Fetching covers and data...`, "success", 3000);
     
     let downloadsInitiated = 0;
     const BATCH_SIZE = 10;
@@ -1169,75 +1223,78 @@ async function downloadAllAlbumCovers() {
         
         const batchPromises = batchUrls.map(async (url) => {
             try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    console.warn(`WARN: Fetch failed for ${url} with status ${response.status}. Skipping cover.`);
-                    return null;
-                }
-                const htmlText = await response.text();
-
-                let releaseTitle = "Untitled";
-                let releaseArtist = artistName; // Main artist name as fallback
-
-                const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
-                if (jsonMatch && jsonMatch[1]) {
-                    try {
-                        const jsonData = JSON.parse(jsonMatch[1]);
-                        if (jsonData.name) releaseTitle = jsonData.name;
-                        if (jsonData.byArtist && jsonData.byArtist.name) releaseArtist = jsonData.byArtist.name;
-                    } catch (e) {
-                        console.error(`ERROR: Failed to parse ld+json for ${url}, falling back to title tag.`, e);
+                // If data is missing (coverUrl, keywords, or classification), fetch the page.
+                 if (!pageDataCache[url] || !pageDataCache[url].coverUrl || pageDataCache[url].keywords === undefined || pageDataCache[url].classification === undefined) {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        console.warn(`WARN: Fetch failed for ${url} with status ${response.status}.`);
+                        return; // Skip this URL on fetch failure
                     }
+                    const htmlText = await response.text();
+                    
+                    if (!pageDataCache[url]) pageDataCache[url] = {};
+
+                    // --- 1. Get Keywords, Title, and Artist from ld+json ---
+                    const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
+                    let releaseTitle = "Untitled";
+                    let releaseArtist = artistName; // Main artist as fallback
+                    let tempKeywords = [];
+                    if (jsonMatch && jsonMatch[1]) {
+                        try {
+                            const jsonData = JSON.parse(jsonMatch[1]);
+                            if (jsonData.name) releaseTitle = jsonData.name;
+                            if (jsonData.byArtist && jsonData.byArtist.name) releaseArtist = jsonData.byArtist.name;
+                            if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) tempKeywords = jsonData.keywords;
+                        } catch (e) { console.error(`ERROR: Failed to parse ld+json for ${url}.`, e); }
+                    }
+                    pageDataCache[url].title = releaseTitle;
+                    pageDataCache[url].artist = releaseArtist;
+                    pageDataCache[url].keywords = tempKeywords.filter(kw => typeof kw === 'string');
+                    
+                    // --- 2. Get Classification ---
+                    let classification = 'paid';
+                    const nypMatch = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>[\s\S]*?<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
+                    if (nypMatch && nypMatch[1]) {
+                        const txt = nypMatch[1].trim().toLowerCase();
+                        if (txt === 'name your price' || txt === 'free download') classification = 'nyp';
+                    } else {
+                        const freeButtonMatch = htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
+                        if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download') classification = 'free';
+                    }
+                    pageDataCache[url].classification = classification;
+
+                    // --- 3. Get Cover URL ---
+                    const coverLinkMatch = htmlText.match(/<a class="popupImage" href="([^"]+)">/);
+                    pageDataCache[url].coverUrl = (coverLinkMatch && coverLinkMatch[1]) ? coverLinkMatch[1] : null;
                 }
                 
-                if (releaseTitle === "Untitled" || releaseArtist === artistName) {
-                     const titleMatch = htmlText.match(/<title>(.*?)<\/title>/);
-                     if (titleMatch && titleMatch[1]) {
-                        const fullTitle = titleMatch[1].trim();
-                        const parts = fullTitle.split(/\s*\|\s*/);
-                        if (releaseTitle === "Untitled") releaseTitle = parts[0] || 'Untitled';
-                        if (releaseArtist === artistName) {
-                           if (parts.length === 3) releaseArtist = parts[1];
-                           else if (parts.length === 2) releaseArtist = parts[1];
-                        }
-                     }
+                // --- Now, use the cached data to download the cover ---
+                const data = pageDataCache[url];
+                if (!data || !data.coverUrl) {
+                     console.warn(`WARN: No cover link found in cache for page ${url}. Skipping cover.`);
+                     return;
                 }
 
-                let truncatedTitle = releaseTitle;
+                let truncatedTitle = data.title;
                 if (truncatedTitle.length > 100) {
                     truncatedTitle = truncatedTitle.substring(0, 90) + '(...)';
                 }
-                
-                const finalAlbumFilename = `${releaseArtist} - ${truncatedTitle}`;
+                const finalAlbumFilename = `${data.artist} - ${truncatedTitle}`;
                 const sanitizedAlbumTitle = sanitizeFilename(finalAlbumFilename);
 
-                const coverLinkMatch = htmlText.match(/<a class="popupImage" href="([^"]+)">/);
-                if (!coverLinkMatch || !coverLinkMatch[1]) {
-                     console.warn(`WARN: No cover link found on page ${url}. Skipping cover.`);
-                     return null;
-                }
-                const baseImageUrl = coverLinkMatch[1];
-
-                const urlObj = new URL(baseImageUrl);
+                const urlObj = new URL(data.coverUrl);
                 const urlPathParts = urlObj.pathname.split('/');
-                const originalFileNameWithExt = urlPathParts[urlPathParts.length - 1];
-                const dotIndex = originalFileNameWithExt.lastIndexOf('.');
-                const fileNameNoExt = (dotIndex > 0) ? originalFileNameWithExt.substring(0, dotIndex) : originalFileNameWithExt;
+                const fileNameNoExt = urlPathParts[urlPathParts.length - 1].split('.')[0];
                 const lastUnderscoreIdx = fileNameNoExt.lastIndexOf('_');
 
                 if (lastUnderscoreIdx === -1) {
-                     console.warn(`WARN: Cannot find '_' in filename to create _0 version for ${url}. Downloading base image as fallback.`);
-                     const fallbackExtMatch = baseImageUrl.match(/\.([^.]+)$/);
-                     const fallbackExt = fallbackExtMatch ? fallbackExtMatch[1] : 'jpg';
-                     const fallbackFilename = `${folderName}/${sanitizedAlbumTitle}.${fallbackExt}`;
-                      browser.downloads.download({ url: baseImageUrl, filename: fallbackFilename, conflictAction: 'uniquify' })
-                        .then(id => { if (id) downloadsInitiated++; });
+                     console.warn(`WARN: Cannot find '_' in filename to create _0 version for ${url}.`);
                      return;
                 }
 
                 const numberPart = fileNameNoExt.substring(0, lastUnderscoreIdx);
-                const baseImgDomainPath = urlObj.protocol + '//' + urlObj.hostname + (urlObj.port ? ':' + urlObj.port : '') + urlPathParts.slice(0, -1).join('/') + '/';
-                const highResImageUrl = baseImgDomainPath + numberPart + "_0";
+                const baseImgDomainPath = `${urlObj.protocol}//${urlObj.hostname}${urlPathParts.slice(0, -1).join('/')}/`;
+                const highResImageUrl = `${baseImgDomainPath}${numberPart}_0`;
 
                 let detectedExtension = 'jpg';
                  try {
@@ -1245,17 +1302,10 @@ async function downloadAllAlbumCovers() {
                     let contentType = headResponse.headers.get('Content-Type');
                     if (!headResponse.ok || !contentType || !contentType.startsWith('image/')) {
                         let getResponse = await fetch(highResImageUrl);
-                        if (getResponse.ok) {
-                            const blob = await getResponse.blob();
-                            contentType = blob.type;
-                        }
+                        if (getResponse.ok) contentType = (await getResponse.blob()).type;
                     }
-                    if (contentType && contentType.startsWith('image/')) {
-                        detectedExtension = getExtensionFromMimeType(contentType);
-                    }
-                } catch (fetchError) {
-                    console.error(`ERROR: Network error determining extension for ${highResImageUrl}. Defaulting to .jpg.`, fetchError);
-                }
+                    if (contentType && contentType.startsWith('image/')) detectedExtension = getExtensionFromMimeType(contentType);
+                } catch (fetchError) { console.error(`ERROR: Network error for ${highResImageUrl}. Defaulting to .jpg.`, fetchError); }
                 
                 const finalFilename = `${folderName}/${sanitizedAlbumTitle}.${detectedExtension}`;
                 browser.downloads.download({
@@ -1276,7 +1326,6 @@ async function downloadAllAlbumCovers() {
         await showPageNotification(activeTab.id, `Processed ${i + batchUrls.length}/${releaseUrls.length}...`, "success", 2000);
 
         if (releaseUrls.length > 100 && (i + BATCH_SIZE < releaseUrls.length)) {
-            console.log(`INFO: downloadAllAlbumCovers: More than 100 albums detected. Pausing for 5 seconds between batches.`);
             await showPageNotification(activeTab.id, `(${i + batchUrls.length}/${releaseUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
             await new Promise(r => setTimeout(r, 5000));
         }
