@@ -559,7 +559,7 @@ async function copyAllKeywordsToClipboard() {
                             }
                         } else {
                             const freeButtonMatch = htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
-                            if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download') {
+                            if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download' || txt === '無料ダウンロード') {
                                classification = 'free';
                             }
                         }
@@ -770,7 +770,7 @@ async function copyTitlesAndUrls(requestedType) {
                             }
                         } else {
                             const freeButtonMatch = htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
-                            if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download') {
+                            if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download' || txt === '無料ダウンロード') {
                                classification = 'free';
                             }
                         }
@@ -1256,10 +1256,10 @@ async function downloadAllAlbumCovers() {
                     const nypMatch = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>[\s\S]*?<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
                     if (nypMatch && nypMatch[1]) {
                         const txt = nypMatch[1].trim().toLowerCase();
-                        if (txt === 'name your price' || txt === 'free download') classification = 'nyp';
+                        if (txt === 'name your price' || txt === 'free download' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') classification = 'nyp';
                     } else {
                         const freeButtonMatch = htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
-                        if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download') classification = 'free';
+                        if (freeButtonMatch && freeButtonMatch[1] && freeButtonMatch[1].trim().toLowerCase() === 'free download' || txt === '無料ダウンロード') classification = 'free';
                     }
                     pageDataCache[url].classification = classification;
 
