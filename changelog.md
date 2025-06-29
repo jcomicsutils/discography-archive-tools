@@ -1,5 +1,11 @@
 # Changelog
 
+### 2025-06-28
+#### Added
+ - New HTML escaping logic for copying release titles. This ensures that special characters (`< > = " ' & @ |`) are correctly converted to their HTML entities before being copied.
+ - This new logic is applied to the "Copy NYP/Free Titles & URLs", "Copy Paid Titles & URLs", and "Copy Releases Links & Titles" functions.
+
+---
 ### 2025-06-26
 #### Changed
  - Implemented a comprehensive caching system for artist-page functions.
