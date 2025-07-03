@@ -16,9 +16,12 @@ function isActiveTab(tab, functionName) {
 }
 
 // Helper function to escape special HTML characters
-function escapeHtml(text) {
+function escapeHtml(text, skipEscaping = false) { // Added skipEscaping parameter
     if (typeof text !== 'string') {
         return text;
+    }
+    if (skipEscaping) {
+        return text; // Return original text if skipping is requested
     }
     return text.replace(/&/g, '&amp;')
                .replace(/</g, '&lt;')
@@ -718,6 +721,16 @@ async function copyTitlesAndUrls(requestedType) {
         return;
     }
 
+    let settings;
+    try {
+        settings = await browser.storage.local.get({ disableHtmlEscaping: false });
+    } catch (e) {
+        console.error("ERROR: copyTitlesAndUrls: Could not retrieve settings, defaulting disableHtmlEscaping to false.", e);
+        settings = { disableHtmlEscaping: false };
+    }
+    const skipHtmlEscaping = settings.disableHtmlEscaping;
+
+
     const artistPageRegex = /^https?:\/\/[^/.]+\.bandcamp\.com\/(music\/?|[?#]|$)/;
 
     if (artistPageRegex.test(activeTab.url)) {
@@ -728,9 +741,12 @@ async function copyTitlesAndUrls(requestedType) {
         try {
             const results = await browser.tabs.executeScript(notificationTabId, {
                 code: `
-                    (function() {
-                        function escapeHtml(text) {
+                    (function(skipHtmlEscaping) { // Pass setting to injected script
+                        function escapeHtmlInjected(text) { // Local escapeHtml for injected script
                             if (typeof text !== 'string') return text;
+                            if (skipHtmlEscaping) {
+                                return text;
+                            }
                             return text.replace(/&/g, '&amp;')
                                        .replace(/</g, '&lt;')
                                        .replace(/>/g, '&gt;')
@@ -772,8 +788,8 @@ async function copyTitlesAndUrls(requestedType) {
                                 releaseArtist = mainArtist;
                             }
                             
-                            const escapedTitle = escapeHtml(releaseTitle);
-                            const escapedArtist = escapeHtml(releaseArtist);
+                            const escapedTitle = escapeHtmlInjected(releaseTitle); // Use injected escapeHtml
+                            const escapedArtist = escapeHtmlInjected(releaseArtist); // Use injected escapeHtml
                             const formattedTitle = escapedArtist ? \`\${escapedTitle} | \${escapedArtist}\` : escapedTitle;
 
                             if (!releaseData.some(r => r.url === a.href)) {
@@ -781,7 +797,7 @@ async function copyTitlesAndUrls(requestedType) {
                             }
                         });
                         return releaseData;
-                    })();
+                    })(${JSON.stringify(skipHtmlEscaping)}); // Pass the setting here
                 `
             });
             releases = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
@@ -852,7 +868,7 @@ async function copyTitlesAndUrls(requestedType) {
                 }
                 
                 if (includePage) {
-                    outputLines.push(release.title); // Title is now pre-escaped
+                    outputLines.push(release.title); // Title is now pre-escaped from injected script or not based on setting
                     outputLines.push(release.url);
                 }
             }
@@ -927,7 +943,7 @@ async function copyTitlesAndUrls(requestedType) {
 
             if (includeTab) {
                 if (tab.title && tab.url) {
-                    outputLines.push(escapeHtml(tab.title.trim()));
+                    outputLines.push(escapeHtml(tab.title.trim(), skipHtmlEscaping)); // Pass setting here
                     outputLines.push(tab.url);
                 }
             }
@@ -1704,6 +1720,16 @@ async function copyReleasesAndTitles() {
         return;
     }
 
+    let settings;
+    try {
+        settings = await browser.storage.local.get({ disableHtmlEscaping: false });
+    } catch (e) {
+        console.error("ERROR: copyReleasesAndTitles: Could not retrieve settings, defaulting disableHtmlEscaping to false.", e);
+        settings = { disableHtmlEscaping: false };
+    }
+    const skipHtmlEscaping = settings.disableHtmlEscaping;
+
+
     const artistPageRegex = /^https?:\/\/[^/.]+\.bandcamp\.com\/(music\/?|[?#]|$)/;
 
     if (!artistPageRegex.test(activeTab.url)) {
@@ -1718,9 +1744,12 @@ async function copyReleasesAndTitles() {
     try {
         const results = await browser.tabs.executeScript(activeTab.id, {
             code: `
-                (function() {
-                    function escapeHtml(text) {
+                (function(skipHtmlEscaping) { // Pass setting to injected script
+                    function escapeHtmlInjected(text) { // Local escapeHtml for injected script
                         if (typeof text !== 'string') return text;
+                        if (skipHtmlEscaping) {
+                            return text;
+                        }
                         return text.replace(/&/g, '&amp;')
                                    .replace(/</g, '&lt;')
                                    .replace(/>/g, '&gt;')
@@ -1762,8 +1791,8 @@ async function copyReleasesAndTitles() {
                             releaseArtist = mainArtist;
                         }
                         
-                        const escapedTitle = escapeHtml(releaseTitle);
-                        const escapedArtist = escapeHtml(releaseArtist);
+                        const escapedTitle = escapeHtmlInjected(releaseTitle); // Use injected escapeHtml
+                        const escapedArtist = escapeHtmlInjected(releaseArtist); // Use injected escapeHtml
                         const formattedTitle = escapedArtist ? \`\${escapedTitle} | \${escapedArtist}\` : escapedTitle;
 
                         if (!releaseData.some(r => r.url === a.href)) {
@@ -1771,7 +1800,7 @@ async function copyReleasesAndTitles() {
                         }
                     });
                     return releaseData;
-                })();
+                })(${JSON.stringify(skipHtmlEscaping)}); // Pass the setting here
             `
         });
         releases = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
@@ -1787,7 +1816,7 @@ async function copyReleasesAndTitles() {
         return;
     }
     
-    // The title is already escaped, so no need for escapeHtml() here
+    // The title is already escaped or not, based on the setting passed to the injected script
     const outputString = releases.map(r => `${r.title}\n${r.url}`).join('\n');
     
     const copySuccess = await copyTextToClipboard(outputString);
@@ -1880,6 +1909,11 @@ browser.runtime.onInstalled.addListener(async (details) => {
     if (typeof currentSettings.notificationsEnabled === 'undefined') {
       await browser.storage.local.set({ notificationsEnabled: true });
       console.log("INFO: background.js: Default notification setting (enabled: true) applied.");
+    }
+     const currentHtmlEscapingSettings = await browser.storage.local.get("disableHtmlEscaping");
+    if (typeof currentHtmlEscapingSettings.disableHtmlEscaping === 'undefined') {
+      await browser.storage.local.set({ disableHtmlEscaping: false }); // Default to HTML escaping enabled
+      console.log("INFO: background.js: Default HTML escaping setting (disabled: false) applied.");
     }
   } catch (e) {
     console.error("ERROR: background.js: Failed to set default notification setting:", e);

@@ -1,5 +1,10 @@
 # Changelog
 
+### 2025-07-03
+#### Added
+ - New option to disable HTML escaping.
+
+---
 ### 2025-06-28
 #### Added
  - New HTML escaping logic for copying release titles. This ensures that special characters (`< > = " ' & @ |`) are correctly converted to their HTML entities before being copied.

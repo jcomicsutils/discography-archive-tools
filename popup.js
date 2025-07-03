@@ -84,18 +84,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const zipcodeInput = document.getElementById('zipcodeInput');
     const notificationsEnabledInput = document.getElementById('notificationsEnabledInput');
     const saFormatEnabledInput = document.getElementById('saFormatEnabledInput');
+    const disableHtmlEscapingInput = document.getElementById('disableHtmlEscapingInput');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const statusMessage = document.getElementById('statusMessage');
     let optionsAreVisible = false;
 
     function loadSettings() {
-        if (!emailInput || !zipcodeInput || !notificationsEnabledInput || !saFormatEnabledInput) return;
+        if (!emailInput || !zipcodeInput || !notificationsEnabledInput || !saFormatEnabledInput || !disableHtmlEscapingInput) return; 
 
         const defaultSettings = {
             email: '',
             zipcode: '',
             notificationsEnabled: true,
-            saFormatEnabled: false
+            saFormatEnabled: false,
+            disableHtmlEscaping: false 
         };
 
         browser.storage.local.get(defaultSettings).then(result => {
@@ -103,13 +105,14 @@ document.addEventListener('DOMContentLoaded', function () {
             zipcodeInput.value = result.zipcode;
             notificationsEnabledInput.checked = result.notificationsEnabled;
             saFormatEnabledInput.checked = result.saFormatEnabled;
+            disableHtmlEscapingInput.checked = result.disableHtmlEscaping; 
         }).catch(error => {
             console.error('Popup: Error loading settings:', error);
-            // Fallback to defaults
             emailInput.value = defaultSettings.email;
-            zipcodeInput.value = defaultSettings.zipcode;
+            safetyInput.value = defaultSettings.zipcode;
             notificationsEnabledInput.checked = defaultSettings.notificationsEnabled;
             saFormatEnabledInput.checked = defaultSettings.saFormatEnabled;
+            disableHtmlEscapingInput.checked = defaultSettings.disableHtmlEscaping; 
         });
     }
 
@@ -134,18 +137,20 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (saveSettingsBtn && emailInput && zipcodeInput && notificationsEnabledInput && statusMessage && saFormatEnabledInput) {
+    if (saveSettingsBtn && emailInput && zipcodeInput && notificationsEnabledInput && statusMessage && saFormatEnabledInput && disableHtmlEscapingInput) { 
         saveSettingsBtn.addEventListener('click', function() {
             const userEmail = emailInput.value.trim();
             const userZipcode = zipcodeInput.value.trim();
             const notificationsEnabled = notificationsEnabledInput.checked;
             const saFormatEnabled = saFormatEnabledInput.checked;
+            const disableHtmlEscaping = disableHtmlEscapingInput.checked; 
 
             browser.storage.local.set({
                 email: userEmail,
                 zipcode: userZipcode,
                 notificationsEnabled: notificationsEnabled,
-                saFormatEnabled: saFormatEnabled
+                saFormatEnabled: saFormatEnabled,
+                disableHtmlEscaping: disableHtmlEscaping 
             })
                 .then(() => {
                     statusMessage.textContent = 'Settings saved!';
