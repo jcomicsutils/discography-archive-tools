@@ -8,6 +8,8 @@
     - Added an "Import JSON" button that opens a new, dedicated browser tab for importing `datools-cache` files.
     - The import page allows users to drag-and-drop or select a JSON file.
     - Upon import, the data is parsed and displayed in three separate panels: "NYP/Free Titles & URLs", "Paid Titles & URLs", and "All Tags", each with its own copy button.
+    - **HTML Format Toggle**: On the "Import JSON" page, a new "HTML" toggle button has been added.
+    - **Item ID Toggle on Import Page**: On the "Import JSON" page, a new "Add item_id" toggle button has been added. When enabled, it appends the `item_id` in brackets (e.g., `[123456789]`) to each release title in the output lists.
 #### Fixed
  - **Classification Bug**: Corrected a critical bug where "Free Download" albums were being misclassified as "Paid" during both live tab analysis and background fetching.
 

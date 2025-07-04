@@ -17,6 +17,13 @@
             <input type="file" id="fileInput" accept=".json" style="display: none;">
         </div>
 
+        <div id="controls-container">
+            <input type="checkbox" id="format-html">
+            <label for="format-html" class="toggle-button">HTML</label>
+            <input type="checkbox" id="add-item-id">
+            <label for="add-item-id" class="toggle-button">Add item_id</label>
+        </div>
+
         <div id="results-container" class="hidden-section">
             <div class="result-panel">
                 <div class="panel-header">
@@ -31,6 +38,13 @@
                     <button class="copy-btn" data-target="paid-output">Copy</button>
                 </div>
                 <textarea id="paid-output" readonly></textarea>
+            </div>
+            <div class="result-panel">
+                <div class="panel-header">
+                    <h4>All Titles & URLs</h4>
+                    <button class="copy-btn" data-target="all-output">Copy</button>
+                </div>
+                <textarea id="all-output" readonly></textarea>
             </div>
             <div class="result-panel">
                 <div class="panel-header">

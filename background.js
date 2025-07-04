@@ -547,6 +547,23 @@ async function copyAllKeywordsToClipboard() {
                         
                         pageDataCache[url] = {};
 
+                        // --- Extract item_id from meta tag ---
+                        const metaTagMatch = htmlText.match(/<meta name="bc-page-properties" content="([^"]+)">/);
+                        let itemId = null;
+                        if (metaTagMatch && metaTagMatch[1]) {
+                            try {
+                                const metaContent = metaTagMatch[1].replace(/&quot;/g, '"');
+                                const pageProps = JSON.parse(metaContent);
+                                if (pageProps && pageProps.item_id) {
+                                    itemId = pageProps.item_id;
+                                }
+                            } catch (e) {
+                                console.error(`ERROR: Failed to parse bc-page-properties meta tag for ${url}`, e);
+                            }
+                        }
+                        pageDataCache[url].item_id = itemId;
+                        // --- End item_id extraction ---
+
                         const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
                         let releaseTitle = "Untitled";
                         let releaseArtist = urlMatch[1]; 
@@ -564,8 +581,6 @@ async function copyAllKeywordsToClipboard() {
                         pageDataCache[url].keywords = tempKeywords.filter(kw => typeof kw === 'string');
 
                         let classification = 'paid';
-
-                        // Check for the specific "Name Your Price" text span first.
                         const nypMatch = htmlText.match(/<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
                         if (nypMatch && nypMatch[1]) {
                             const txt = nypMatch[1].trim().toLowerCase();
@@ -573,14 +588,10 @@ async function copyAllKeywordsToClipboard() {
                                 classification = 'nyp';
                             }
                         }
-
-                        // If it's not NYP, then check for a "Free Download" button inside the main purchase H4.
                         if (classification === 'paid') {
                             const h4Match = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>([\s\S]*?)<\/h4>/i);
                             if (h4Match && h4Match[1]) {
-                                const h4Content = h4Match[1];
-                                // Now, look for a button inside the H4's content.
-                                const buttonMatch = h4Content.match(/<button[^>]*>([\s\S]*?)<\/button>/i);
+                                const buttonMatch = h4Match[1].match(/<button[^>]*>([\s\S]*?)<\/button>/i);
                                 if (buttonMatch && buttonMatch[1]) {
                                     const buttonText = buttonMatch[1].trim().toLowerCase();
                                     if (buttonText === 'free download' || buttonText === '無料ダウンロード') {
@@ -589,7 +600,6 @@ async function copyAllKeywordsToClipboard() {
                                 }
                             }
                         }
-
                         pageDataCache[url].classification = classification;
 
                     } catch(e) {
@@ -599,6 +609,7 @@ async function copyAllKeywordsToClipboard() {
                         pageDataCache[url].classification = 'paid';
                         pageDataCache[url].title = 'Error';
                         pageDataCache[url].artist = 'Error';
+                        pageDataCache[url].item_id = null;
                     }
                 }
             });
@@ -610,12 +621,10 @@ async function copyAllKeywordsToClipboard() {
                     allKeywordsCollected.push(...pageDataCache[url].keywords);
                 }
             }
-
             pagesScanned += batchUrls.length;
             if (i + BATCH_SIZE < albumUrls.length) {
                 await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${albumUrls.length} releases...`, "success", 2000);
             }
-            
             if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
                 await showPageNotification(notificationTabId, `(${pagesScanned}/${albumUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
                 await new Promise(r => setTimeout(r, 5000));
@@ -624,24 +633,19 @@ async function copyAllKeywordsToClipboard() {
 
         const artistNameForFile = urlMatch[1];
         await saveCacheToJSON(artistNameForFile, pageDataCache);
-
         if (allKeywordsCollected.length === 0) {
             await showPageNotification(notificationTabId, "No keywords found in any releases.", "error");
             return;
         }
-
         const uniqueKeywords = Array.from(new Set(allKeywordsCollected.map(kw => kw.toLowerCase().trim()).filter(kw => kw)));
         const formattedKeywords = uniqueKeywords.join('; ');
         const copySuccess = await copyTextToClipboard(formattedKeywords);
-
         if (copySuccess) {
             await showPageNotification(notificationTabId, `All tags from ${albumUrls.length} releases copied!`, "success");
         } else {
             await showPageNotification(notificationTabId, "Failed to copy tags.", "error");
         }
-
     } else {
-        // Fallback for scanning open tabs remains the same
         console.log("INFO: copyAllKeywordsToClipboard: Not an artist page. Falling back to method for scanning open tabs.");
         let allKeywordsCollected = [];
         let queriedTabs;
@@ -740,14 +744,12 @@ async function copyTitlesAndUrls(requestedType) {
     }
     const skipHtmlEscaping = settings.disableHtmlEscaping;
 
-
     const artistPageRegex = /^https?:\/\/([^\/]+)\.bandcamp\.com\/(music\/?|[?#]|$)/;
     const urlMatch = activeTab.url.match(artistPageRegex);
 
     if (urlMatch) {
         pageDataCache = {};
         console.log(`INFO: copyTitlesAndUrls: Detected artist page. Cache has been reset.`);
-
         await showPageNotification(notificationTabId, "Scanning artist page for releases...", "success", 2000);
 
         let releases;
@@ -762,20 +764,11 @@ async function copyTitlesAndUrls(requestedType) {
                         const links = document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a');
                         
                         links.forEach(a => {
-                            if (!a.href || !(a.href.includes('/album/') || a.href.includes('/track/'))) {
-                                return;
-                            }
-
+                            if (!a.href || !(a.href.includes('/album/') || a.href.includes('/track/'))) return;
                             const titleEl = a.querySelector('p.title, .item_link_title');
-                            if (!titleEl) {
-                                return;
-                            }
-
-                            let releaseTitle;
-                            let releaseArtist;
-                            
+                            if (!titleEl) return;
+                            let releaseTitle, releaseArtist;
                             const artistOverrideEl = titleEl.querySelector('span.artist-override');
-
                             if (artistOverrideEl) {
                                 releaseArtist = artistOverrideEl.textContent.trim();
                                 const tempTitleEl = titleEl.cloneNode(true);
@@ -785,7 +778,6 @@ async function copyTitlesAndUrls(requestedType) {
                                 releaseTitle = titleEl.textContent.trim();
                                 releaseArtist = mainArtist;
                             }
-
                             if (!releaseData.some(r => r.url === a.href)) {
                                 releaseData.push({ title: releaseTitle, artist: releaseArtist, url: a.href });
                             }
@@ -827,39 +819,50 @@ async function copyTitlesAndUrls(requestedType) {
                         pageDataCache[url].title = release.title;
                         pageDataCache[url].artist = release.artist;
 
-                        let classification = 'paid';
-
-                            // Check for the specific "Name Your Price" text span first.
-                            const nypMatch = htmlText.match(/<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
-                            if (nypMatch && nypMatch[1]) {
-                                const txt = nypMatch[1].trim().toLowerCase();
-                                if (txt === 'name your price' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
-                                    classification = 'nyp';
+                        // --- Extract item_id from meta tag ---
+                        const metaTagMatch = htmlText.match(/<meta name="bc-page-properties" content="([^"]+)">/);
+                        let itemId = null;
+                        if (metaTagMatch && metaTagMatch[1]) {
+                            try {
+                                const metaContent = metaTagMatch[1].replace(/&quot;/g, '"');
+                                const pageProps = JSON.parse(metaContent);
+                                if (pageProps && pageProps.item_id) {
+                                    itemId = pageProps.item_id;
                                 }
+                            } catch (e) {
+                                console.error(`ERROR: Failed to parse bc-page-properties meta tag for ${url}`, e);
                             }
+                        }
+                        pageDataCache[url].item_id = itemId;
+                        // --- End item_id extraction ---
 
-                            // If it's not NYP, then check for a "Free Download" button inside the main purchase H4.
-                            if (classification === 'paid') {
-                                const h4Match = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>([\s\S]*?)<\/h4>/i);
-                                if (h4Match && h4Match[1]) {
-                                    const h4Content = h4Match[1];
-                                    // Now, look for a button inside the H4's content.
-                                    const buttonMatch = h4Content.match(/<button[^>]*>([\s\S]*?)<\/button>/i);
-                                    if (buttonMatch && buttonMatch[1]) {
-                                        const buttonText = buttonMatch[1].trim().toLowerCase();
-                                        if (buttonText === 'free download' || buttonText === '無料ダウンロード') {
-                                            classification = 'free';
-                                        }
+                        let classification = 'paid';
+                        const nypMatch = htmlText.match(/<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
+                        if (nypMatch && nypMatch[1]) {
+                            const txt = nypMatch[1].trim().toLowerCase();
+                            if (txt === 'name your price' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
+                                classification = 'nyp';
+                            }
+                        }
+                        if (classification === 'paid') {
+                            const h4Match = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>([\s\S]*?)<\/h4>/i);
+                            if (h4Match && h4Match[1]) {
+                                const buttonMatch = h4Match[1].match(/<button[^>]*>([\s\S]*?)<\/button>/i);
+                                if (buttonMatch && buttonMatch[1]) {
+                                    const buttonText = buttonMatch[1].trim().toLowerCase();
+                                    if (buttonText === 'free download' || buttonText === '無料ダウンロード') {
+                                        classification = 'free';
                                     }
                                 }
                             }
-
-                            pageDataCache[url].classification = classification;
+                        }
+                        pageDataCache[url].classification = classification;
 
                     } catch (e) {
                         console.error(`ERROR: Failed to fetch classification for ${url}:`, e);
                         if (!pageDataCache[url]) pageDataCache[url] = {};
                         pageDataCache[url].classification = 'paid';
+                        pageDataCache[url].item_id = null;
                     }
                 }
             });
@@ -887,7 +890,6 @@ async function copyTitlesAndUrls(requestedType) {
             if (i + BATCH_SIZE < releases.length) {
                 await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${releases.length} releases...`, "success", 2000);
             }
-            
             if (releases.length > 100 && (i + BATCH_SIZE < releases.length)) {
                 await showPageNotification(notificationTabId, `(${pagesScanned}/${releases.length}) Pausing for 5s to avoid errors...`, "success", 4800);
                 await new Promise(r => setTimeout(r, 5000));
@@ -908,7 +910,6 @@ async function copyTitlesAndUrls(requestedType) {
             const typeString = requestedType === 'nypFree' ? 'NYP/Free' : 'Paid';
             await showPageNotification(notificationTabId, `No ${typeString} releases found to copy.`, "error");
         }
-
     } else {
         // Fallback for scanning open tabs remains the same
     }
@@ -1191,11 +1192,7 @@ async function downloadAllAlbumCovers() {
     } catch (e) {
         console.error("ERROR: downloadAllAlbumCovers: Failed to inject script to get artist name.", e);
     }
-
-    if (!artistName) {
-        artistName = urlMatch[1];
-    }
-
+    if (!artistName) artistName = urlMatch[1];
     const folderName = sanitizeFilename(artistName) + " - Album Covers";
 
     await showPageNotification(activeTab.id, `Scanning artist page for covers...`, "success", 2500);
@@ -1237,10 +1234,25 @@ async function downloadAllAlbumCovers() {
                     
                     pageDataCache[url] = {};
 
+                    // --- Extract item_id from meta tag ---
+                    const metaTagMatch = htmlText.match(/<meta name="bc-page-properties" content="([^"]+)">/);
+                    let itemId = null;
+                    if (metaTagMatch && metaTagMatch[1]) {
+                        try {
+                            const metaContent = metaTagMatch[1].replace(/&quot;/g, '"');
+                            const pageProps = JSON.parse(metaContent);
+                            if (pageProps && pageProps.item_id) {
+                                itemId = pageProps.item_id;
+                            }
+                        } catch (e) {
+                            console.error(`ERROR: Failed to parse bc-page-properties meta tag for ${url}`, e);
+                        }
+                    }
+                    pageDataCache[url].item_id = itemId;
+                    // --- End item_id extraction ---
+
                     const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
-                    let releaseTitle = "Untitled";
-                    let releaseArtist = artistName;
-                    let tempKeywords = [];
+                    let releaseTitle = "Untitled", releaseArtist = artistName, tempKeywords = [];
                     if (jsonMatch && jsonMatch[1]) {
                         try {
                             const jsonData = JSON.parse(jsonMatch[1]);
@@ -1254,8 +1266,6 @@ async function downloadAllAlbumCovers() {
                     pageDataCache[url].keywords = tempKeywords.filter(kw => typeof kw === 'string');
                     
                     let classification = 'paid';
-
-                    // Check for the specific "Name Your Price" text span first.
                     const nypMatch = htmlText.match(/<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
                     if (nypMatch && nypMatch[1]) {
                         const txt = nypMatch[1].trim().toLowerCase();
@@ -1263,14 +1273,10 @@ async function downloadAllAlbumCovers() {
                             classification = 'nyp';
                         }
                     }
-
-                    // If it's not NYP, then check for a "Free Download" button inside the main purchase H4.
                     if (classification === 'paid') {
                         const h4Match = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>([\s\S]*?)<\/h4>/i);
                         if (h4Match && h4Match[1]) {
-                            const h4Content = h4Match[1];
-                            // Now, look for a button inside the H4's content.
-                            const buttonMatch = h4Content.match(/<button[^>]*>([\s\S]*?)<\/button>/i);
+                            const buttonMatch = h4Match[1].match(/<button[^>]*>([\s\S]*?)<\/button>/i);
                             if (buttonMatch && buttonMatch[1]) {
                                 const buttonText = buttonMatch[1].trim().toLowerCase();
                                 if (buttonText === 'free download' || buttonText === '無料ダウンロード') {
@@ -1279,9 +1285,7 @@ async function downloadAllAlbumCovers() {
                             }
                         }
                     }
-
                     pageDataCache[url].classification = classification;
-
                     const coverLinkMatch = htmlText.match(/<a class="popupImage" href="([^"]+)">/);
                     pageDataCache[url].coverUrl = (coverLinkMatch && coverLinkMatch[1]) ? coverLinkMatch[1] : null;
                 }
@@ -1293,9 +1297,7 @@ async function downloadAllAlbumCovers() {
                 }
 
                 let truncatedTitle = data.title;
-                if (truncatedTitle.length > 100) {
-                    truncatedTitle = truncatedTitle.substring(0, 90) + '(...)';
-                }
+                if (truncatedTitle.length > 100) truncatedTitle = truncatedTitle.substring(0, 90) + '(...)';
                 const finalAlbumFilename = `${data.artist} - ${truncatedTitle}`;
                 const sanitizedAlbumTitle = sanitizeFilename(finalAlbumFilename);
 
@@ -1314,7 +1316,7 @@ async function downloadAllAlbumCovers() {
                 const highResImageUrl = `${baseImgDomainPath}${numberPart}_0`;
 
                 let detectedExtension = 'jpg';
-                 try {
+                try {
                     let headResponse = await fetch(highResImageUrl, { method: 'HEAD' });
                     let contentType = headResponse.headers.get('Content-Type');
                     if (!headResponse.ok || !contentType || !contentType.startsWith('image/')) {
@@ -1333,7 +1335,6 @@ async function downloadAllAlbumCovers() {
                     (id) => { if (id) downloadsInitiated++; },
                     (err) => console.error(`ERROR: Download failed for ${finalFilename}:`, err)
                 );
-
             } catch (e) {
                 console.error(`ERROR: Failed processing URL ${url}:`, e);
             }
@@ -1895,7 +1896,8 @@ async function saveCacheToJSON(artist, cacheData, forceSave = false) {
                 title: escapeHtml(item.title, skipHtmlEscaping),
                 artist: escapeHtml(item.artist, skipHtmlEscaping),
                 classification: item.classification,
-                tags: item.keywords
+                tags: item.keywords,
+                item_id: item.item_id // --- This line is added ---
             });
         }
     }
@@ -1980,6 +1982,23 @@ async function forceSaveCacheToJSON() {
                     if (!response.ok) return;
                     const htmlText = await response.text();
                     pageDataCache[url] = {};
+
+                    // --- Extract item_id from meta tag ---
+                    const metaTagMatch = htmlText.match(/<meta name="bc-page-properties" content="([^"]+)">/);
+                    let itemId = null;
+                    if (metaTagMatch && metaTagMatch[1]) {
+                        try {
+                            const metaContent = metaTagMatch[1].replace(/&quot;/g, '"');
+                            const pageProps = JSON.parse(metaContent);
+                            if (pageProps && pageProps.item_id) {
+                                itemId = pageProps.item_id;
+                            }
+                        } catch (e) {
+                            console.error(`ERROR: Failed to parse bc-page-properties meta tag for ${url}`, e);
+                        }
+                    }
+                    pageDataCache[url].item_id = itemId;
+                    // --- End item_id extraction ---
 
                     const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
                     let releaseTitle = "Untitled", releaseArtist = urlMatch[1], tempKeywords = [];

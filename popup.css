@@ -189,8 +189,48 @@ ul#popup-menu button:hover, #optionsSection button#saveSettingsBtn:hover {
     border-color: #c792ea;
 }
 
-#results-container {
+#controls-container {
+    display: flex;
+    justify-content: flex-start;
+    gap: 10px; /* Added for spacing between buttons */
     margin-top: 30px;
+    margin-bottom: 10px;
+}
+
+#format-html, #add-item-id { /* Apply to both checkboxes */
+    display: none; /* Hide the actual checkbox */
+}
+
+.toggle-button {
+    padding: 6px 12px;
+    font-size: 0.9em;
+    background-color: #2b2844; /* Default "off" state */
+    border: 1px solid #c792ea;
+    border-radius: 5px;
+    color: #c792ea; /* Default "off" text color */
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+    user-select: none;
+}
+
+.toggle-button:hover {
+    background-color: #413a63;
+}
+
+/* Style for the "on" state */
+#format-html:checked + .toggle-button,
+#add-item-id:checked + .toggle-button {
+    background-color: #c792ea; /* "On" state, like the copy button */
+    color: #1e1e2f;
+}
+
+#format-html:checked + .toggle-button:hover,
+#add-item-id:checked + .toggle-button:hover {
+    background-color: #d1a4f0;
+}
+
+#results-container {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
