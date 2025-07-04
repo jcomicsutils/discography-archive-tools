@@ -3,28 +3,35 @@ body {
     margin: 0; 
     background-color: #282c34; 
     color: #abb2bf; 
-    min-width: 260px; /* Ensures enough width for content */
+    min-width: 280px;
 }
 
 .popup-container {
     position: relative; 
-    padding: 15px; /* Overall padding for the popup content */
-    /* Add extra padding at the bottom to make space for the icon, 
-       if the icon is large or lists are long. */
-    padding-bottom: 45px; /* Adjust this value as needed */
+    padding: 15px;
+    padding-bottom: 45px;
+}
+
+#jsonIconContainer {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 10;
+    display: flex;
+    gap: 4px;
 }
 
 #optionsIconContainer {
     position: absolute;
-    bottom: 10px;  /* Distance from the bottom of .popup-container */
-    right: 10px;   /* Distance from the right of .popup-container */
-    z-index: 10;   /* Keep it on top of other flow content */
+    bottom: 10px;
+    right: 10px;
+    z-index: 10;
 }
 
-#toggleOptionsBtn {
+#toggleOptionsBtn, #forceSaveJsonBtn, #importJsonBtn {
     background: none;
-    border: 1px solid transparent; /* Make border transparent initially */
-    color: #7a828e; /* Slightly muted cog color */
+    border: 1px solid transparent;
+    color: #7a828e;
     font-size: 20px; 
     padding: 5px; 
     cursor: pointer;
@@ -33,25 +40,31 @@ body {
     transition: color 0.2s ease-in-out, border-color 0.2s ease-in-out;
 }
 
-#toggleOptionsBtn:hover {
-    color: #61afef; /* Accent color on hover */
-    border-color: #4a4f5b; /* Subtle border on hover */
+#forceSaveJsonBtn img, #importJsonBtn img {
+    display: block;
+    width: 20px;
+    height: 20px;
+    filter: grayscale(1) opacity(0.7);
+    transition: filter 0.2s ease-in-out;
 }
 
-/* Main Menu List */
+#toggleOptionsBtn:hover, #forceSaveJsonBtn:hover, #importJsonBtn:hover {
+    color: #61afef;
+    border-color: #4a4f5b;
+}
+
+#forceSaveJsonBtn:hover img, #importJsonBtn:hover img {
+    filter: grayscale(0) opacity(1);
+}
+
 ul#popup-menu {
     list-style-type: none;
     margin: 0;
     padding: 0;
 }
 
-ul#popup-menu li {
-    margin-bottom: 8px; 
-}
-
-ul#popup-menu li:last-child {
-    margin-bottom: 0; 
-}
+ul#popup-menu li { margin-bottom: 8px; }
+ul#popup-menu li:last-child { margin-bottom: 0; }
 
 ul#popup-menu button, #optionsSection button#saveSettingsBtn {
     width: 100%; 
@@ -73,17 +86,8 @@ ul#popup-menu button:hover, #optionsSection button#saveSettingsBtn:hover {
     border-color: #6f7583;
 }
 
-ul#popup-menu button:active, #optionsSection button#saveSettingsBtn:active {
-    background-color: #2c3038; 
-    border-color: #3a3f4b;
-    transform: translateY(1px); 
-}
-
-/* Options Section Styling */
-#optionsSection {
-    padding-top: 10px; 
-}
-
+/* Sections */
+#optionsSection { padding-top: 10px; }
 #optionsSection h3 {
     color: #61afef; 
     margin-top: 0;
@@ -94,17 +98,19 @@ ul#popup-menu button:active, #optionsSection button#saveSettingsBtn:active {
     padding-bottom: 8px;
 }
 
-.option-item {
-    margin-bottom: 12px;
+/* Back Button */
+#backToMainMenuFromOptionsBtn {
+    background: none;
+    border: none;
+    color: #61afef;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0 0 10px 0;
 }
 
-.option-item label {
-    display: block;
-    margin-bottom: 5px;
-    font-size: 13px;
-    color: #abb2bf;
-}
-
+/* Option Items */
+.option-item { margin-bottom: 12px; }
+.option-item label { display: block; margin-bottom: 5px; font-size: 13px; }
 .option-item input[type="email"],
 .option-item input[type="text"] {
     width: calc(100% - 22px); 
@@ -113,73 +119,134 @@ ul#popup-menu button:active, #optionsSection button#saveSettingsBtn:active {
     border: 1px solid #4a4f5b;
     border-radius: 4px;
     color: #e0e0e0;
-    font-size: 14px;
 }
 
-#optionsSection button#saveSettingsBtn {
-    margin-top: 15px;
-    background-color: #61afef; 
-    border-color: #61afef;
-    color: #282c34; 
-    font-weight: bold;
-}
+#saveSettingsBtn { margin-top: 15px; background-color: #61afef; color: #282c34; font-weight: bold; }
 
-#optionsSection button#saveSettingsBtn:hover {
-    background-color: #529bcf;
-    border-color: #529bcf;
-}
-
-
-#statusMessage {
-    margin-top: 10px;
-    text-align: center;
-    font-size: 12px;
-    min-height: 15px; 
-}
+#statusMessage { margin-top: 10px; text-align: center; font-size: 12px; min-height: 15px; }
 #statusMessage.success { color: #98c379; }
 #statusMessage.error { color: #e06c75; }
 
+/* Visibility */
+.hidden-section { display: none; }
+.active-section { display: block; }
 
-/* Visibility Toggling */
-.hidden-section {
-    display: none;
-}
-.active-section {
-    display: block;
+/* Compound Button */
+.compound-button-li { display: flex; }
+.compound-button-li button { margin-bottom: 0; flex-grow: 1; flex-basis: 0; }
+.compound-button-li .main-action { flex-grow: 3; border-top-right-radius: 0; border-bottom-right-radius: 0; border-right-width: 0.5px; }
+.compound-button-li .sub-action { flex-grow: 1; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-width: 0.5px; text-align: center; padding-left: 8px; padding-right: 8px; }
+
+/* --- REDESIGNED IMPORT PAGE STYLES --- */
+.import-page-body {
+    background: linear-gradient(to bottom right, #1e1e2f, #1e1e24);
+    color: #dcd9f4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    padding: 20px;
 }
 
-/* Ensure option section elements don't get hidden by mistake */
-#optionsSection.active-section {
-    display: block;
-}
-#mainMenuSection.active-section {
-    display: block;
+.import-container {
+    max-width: 700px;
+    margin: 40px auto;
+    padding: 20px;
 }
 
-/* Compound Button for "Copy Releases" */
-.compound-button-li {
+.import-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.import-header h1 {
+    color: #c792ea;
+    font-size: 2em;
+    margin-bottom: 10px;
+}
+
+.import-header p {
+    color: #9f9fce;
+    font-size: 1.1em;
+}
+
+#drop-zone {
+    border: 2px dashed #544a7d;
+    border-radius: 10px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    background-color: rgba(43, 40, 68, 0.5);
+    transition: background-color 0.3s, border-color 0.3s;
+}
+
+#drop-zone p {
+    margin: 0;
+    font-size: 1.2em;
+    color: #9f9fce;
+    pointer-events: none; /* Make text unselectable */
+}
+
+#drop-zone.drag-over {
+    background-color: rgba(84, 74, 125, 0.7);
+    border-color: #c792ea;
+}
+
+#results-container {
+    margin-top: 30px;
     display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
 }
 
-.compound-button-li button {
-    margin-bottom: 0; /* Override default li>button margin */
-    flex-grow: 1;
-    flex-basis: 0;
+.result-panel {
+    background-color: #2b2844;
+    border: 1px solid #413a63;
+    border-radius: 8px;
+    padding: 15px;
+    flex: 1;
+    min-width: 280px; /* For responsiveness */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
 }
 
-.compound-button-li button.main-action {
-    flex-grow: 3; /* ~75% */
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-    border-right-width: 0.5px; /* Thin separator */
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
 }
 
-.compound-button-li button.sub-action {
-    flex-grow: 1; /* ~25% */
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-    border-left-width: 0.5px;
-    text-align: center; /* Center the '& Titles' text */
-    padding-left: 8px;
-    padding-right: 8px;
+.panel-header h4 {
+    margin: 0;
+    font-size: 1em;
+    color: #c792ea;
+}
+
+.copy-btn {
+    padding: 6px 12px;
+    font-size: 0.9em;
+    background-color: #c792ea;
+    border: none;
+    border-radius: 5px;
+    color: #1e1e2f;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.copy-btn:hover {
+    background-color: #d1a4f0;
+}
+
+.copy-btn:active {
+    transform: translateY(1px);
+}
+
+textarea {
+    width: calc(100% - 20px);
+    height: 100px;
+    background-color: #1e1e2f;
+    border: 1px solid #413a63;
+    border-radius: 5px;
+    color: #dcd9f4;
+    padding: 8px;
+    resize: vertical;
+    font-family: 'Courier New', Courier, monospace;
 }

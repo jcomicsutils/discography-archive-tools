@@ -1,5 +1,17 @@
 # Changelog
 
+### 2025-07-04
+#### Added
+ - **JSON Cache Export**: Added an option in settings to automatically save the cache (including URL, classification, artist, title, and tags) to a `datools-cache/artist.json` file after a scan.
+ - **Force Save JSON Button**: A new icon button was added to the main UI to allow users to scan an artist's page and save the cache to a JSON file on demand, irrespective of the setting.
+ - **Import JSON Feature**:
+    - Added an "Import JSON" button that opens a new, dedicated browser tab for importing `datools-cache` files.
+    - The import page allows users to drag-and-drop or select a JSON file.
+    - Upon import, the data is parsed and displayed in three separate panels: "NYP/Free Titles & URLs", "Paid Titles & URLs", and "All Tags", each with its own copy button.
+#### Fixed
+ - **Classification Bug**: Corrected a critical bug where "Free Download" albums were being misclassified as "Paid" during both live tab analysis and background fetching.
+
+---
 ### 2025-07-03
 #### Added
  - New option to disable HTML escaping.

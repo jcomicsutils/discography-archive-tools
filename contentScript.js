@@ -1,4 +1,4 @@
-// contentScript.js (Revised)
+// contentScript.js (Corrected)
 (function() {
   let classification = 'paid'; // Default classification
 
@@ -6,29 +6,24 @@
   const purchaseSectionH4 = document.querySelector('h4.ft.compound-button.main-button');
 
   if (purchaseSectionH4) {
-    // Attempt 1: Check for the span structure (this handles "name your price" and potentially some "free download" cases)
+    // Attempt 1: Check for the span structure for "name your price"
     const nypSpan = purchaseSectionH4.querySelector('span.buyItemExtra.buyItemNyp.secondaryText');
     if (nypSpan) {
       const txt = nypSpan.textContent.trim().toLowerCase();
-      // If this span contains "name your price" or "free download", classify as 'nyp'
-      // ('nyp' is treated as non-paid by your background.js script)
       if (txt === 'name your price' || txt === 'free download' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
         classification = 'nyp';
       }
     }
 
-    // Attempt 2: If not classified by the span, check for a direct "Free Download" button
-    // This block will only execute if the item wasn't classified as 'nyp' above
+    // Attempt 2: If not classified, check for a direct "Free Download" button
     if (classification === 'paid') {
       const freeDownloadButton = purchaseSectionH4.querySelector('button.download-link.buy-link');
       if (freeDownloadButton) {
         const buttonTxt = freeDownloadButton.textContent.trim().toLowerCase();
-        // If the button text is "free download", classify as 'free'
-        // ('free' is also treated as non-paid by your background.js script)
-        if (buttonTxt === 'free download' || txt === '無料ダウンロード') {
+        // It now correctly checks `buttonTxt` for both English and Japanese.
+        if (buttonTxt === 'free download' || buttonTxt === '無料ダウンロード') {
           classification = 'free';
         }
-        // Other button texts like "Buy Now" would not change the classification from 'paid'
       }
     }
   }

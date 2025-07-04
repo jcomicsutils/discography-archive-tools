@@ -1,7 +1,7 @@
 ![Discography Archive Tools Logo](./logo.svg)
 # [Discography Archive Tools]
 
-A Firefox browser extension designed to help the archival of music from Bandcamp, features for tab management, automated download assistance for "Name Your Price" (NYP) and free items, and convenient data extraction. Made with the help of the Gemini AI.
+A Firefox browser extension designed to help the archival of music from Bandcamp, features for automated download assistance for "Name Your Price" (NYP) and free items, and convenient data extraction. Made with the help of the Gemini AI.
 
 ## Features
 
@@ -11,108 +11,90 @@ A Firefox browser extension designed to help the archival of music from Bandcamp
 
 * **In-Popup Options Panel**:
     * Easily configure your email address and zip code via a settings panel directly within the popup menu.
-    * These saved settings are then used by the "Automated Download" feature to help fill in required fields for some albums.
+    * Toggle on-page notifications.
+    * Toggle HTML escaping for copied titles.
+    * Enable or disable automatic JSON cache saving.
 
 * **Smart Tab Handling**: All operations that iterate through tabs (sorting, data copying, etc.) ignore hidden or discarded tabs to ensure stability and process only active, relevant pages.
 
 * **Rate-Limiting Prevention**: For artist-page functions that scan many releases (like copying tags or downloading covers), a delay is automatically introduced on very large discographies (>100 releases) to prevent server errors.
 
-* **On-Page Notifications**:
-    * Receive brief, auto-fading notifications directly on your current Bandcamp page (typically in the bottom-right corner, but it can gitch sometimes) for feedback on actions like "Tabs Sorted!" or "Tags Copied!".
+* **On-Page Notifications**: Receive brief, auto-fading notifications directly on your current page for instant feedback on actions like "Tabs Sorted!" or "Tags Copied!".
 
-* **Sort Bandcamp Tabs**: Automatically sorts your open Bandcamp album/track tabs in the current window, placing "Paid" items to the left and "Name Your Price" (NYP) / "Free" items to the right.
+### Core Functions
 
-* **Automated Download for NYP/Free Items**: For tabs identified as NYP or Free, this feature streamlines the download process:
-    * Clicks the initial download button.
-    * Automatically sets the price to "0" for "Name Your Price" items.
-    * Proceeding through subsequent confirmation steps. If an email address and zip code is required during the download process, the extension will automatically fill these fields using the values you've saved in the options panel.
-    * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) extension is recommended for downloading everything at once. Or [JDownloader](https://jdownloader.org/) using the `Copy Download Links` feature.
+* **Sort Bandcamp Tabs**: Automatically sorts your open Bandcamp album/track tabs, placing "Paid" items to the left and "Name Your Price" (NYP) / "Free" items to the right.
 
-* **Download Page Images**: From the active Bandcamp page, this feature attempts to download up to three key images:
-    * **Artist Image**: The artist photo (typically from `a.popupImage` or identified fallbacks). Saved as `Artist Photo.{original_extension}`.
-    * **Custom Header**: The banner image usually found at the top of artist pages. Saved as `Custom Header.{original_extension}`.
-    * **Page Background**: The full-page background image defined in the page's custom styles. Saved as `Background Image.{original_extension}`.
-    * For each of these images, it also attempts to download a higher-resolution or original version (often a `_0` variant), saved with an `_orig` suffix and an automatically detected file extension (e.g., `Artist Image_orig.png`).
-    * The feature skips downloading common placeholder "blank" images.
+* **Automated Download for NYP/Free Items**: For tabs identified as NYP or Free, this feature streamlines the download process by clicking through the download prompts and automatically entering "0" for NYP items. It will also use your saved email/zip from the settings if required.
+    * The [DownThemAll](https://addons.mozilla.org/en-US/firefox/addon/downthemall/) or [JDownloader](https://jdownloader.org/) (using `Copy Download Links`) extensions are recommended for managing the final downloads.
 
-* **Download Album Covers**: From an active Bandcamp artist page, this feature finds all releases and downloads the highest quality cover art (`_0` variant), each into a new folder named after the artist (`{artist} - Album Covers`).
+* **Download Images**: From any artist, album, or track page, this feature downloads up to three key images:
+    * **Artist Image**: Saved as `Artist Photo.{ext}`.
+    * **Custom Header**: Saved as `Custom Header.{ext}`.
+    * **Page Background**: Saved as `Background Image.{ext}`.
+    * For each, it also attempts to download a higher-resolution `_0` variant (e.g., `Artist Photo_orig.png`).
 
-* **Copy All Tags/Keywords**: Scans all active Bandcamp album/track tabs and extracts their tags. When used on an artist's main page (e.g., `artist.bandcamp.com`), it finds all releases and fetches their tags in the background without opening new tabs. All tags are combined into a single, semicolon-separated list and copied to your clipboard.
+* **Download Album Covers**: From an artist's main page, this finds all releases and downloads the highest quality cover art for each into a folder named `{artist} - Album Covers`. **This can miss some covers for various reasons, please double check.**
 
-* **Copy Releases Links & Titles**: This is a compound button available on artist pages (e.g., `artist.bandcamp.com`) that provides two fast actions for copying release information:
-    * **Copy Releases Links** (main button): Finds all releases on the page and copies their URLs to the clipboard, separated by newlines.
-    * **& Titles** (side button): Copies both the release URL and a formatted title (`Title | Artist`) for all releases on the page. It finds the correct artist for each release, uses the main page name if release doesn't have a set artist.
+* **Copy Data to Clipboard**:
+    * **Copy All Tags/Keywords**: Scans all active tabs or fetches data from all releases on an artist's page. All tags are combined into a single, semicolon-separated list.
+    * **Copy Releases Links & Titles**: A compound button on artist pages. Copies just the links, or both the links and formatted titles (`Title | Artist`).
+    * **Copy NYP/Free & Paid Titles/URLs**: Separately copy the titles and URLs for releases classified as NYP/Free or Paid.
+    * **Copy Download Links**: From the final Bandcamp download pages, copies all ready-to-download links.
+    * **Copy Archive.org File List**: On an Archive.org download page, this copies the list of files from the main table.
 
-* **Copy Download Links**: Checks all open Bandcamp download pages (the pages where the ZIP file is ready) and copies the final download links to the clipboard.
+### JSON Cache & Import/Export
 
-* **Copy NYP/Free Titles & URLs**: Collects the page titles and URLs for all releases classified as "Name Your Price" or "Free." When used on an artist's page, this feature will fetch and classify all releases in the background. On individual album/track pages, it scans your open tabs.
+The extension now includes a JSON workflow to save and reuse scraped data.
 
-* **Copy Paid Titles & URLs**: Similar to the above, but specifically targets releases classified as "Paid," collecting and formatting their titles and URLs for clipboard copying from either an artist's page or your open tabs.
+* **Automatic JSON Cache Export**: When enabled in settings, any function that scans an artist's page will automatically save a detailed JSON file containing the `url`, `title`, `artist`, `classification`, and `tags` for every release.
+    * Files are saved to your default downloads folder under `datools-cache/artist-name.json`.
 
-* **Copy Archive.org File List**: On an Archive.org download page (`archive.org/download/*`), this feature finds the main file table and copies the "Name" column to your clipboard, providing a clean list of all files and folders.
+* **Force Save JSON Button**: A new icon in the popup UI allows you to scan an artist's page and save the cache file on-demand, even if the automatic setting is disabled.
+
+* **Import JSON Feature**:
+    * Clicking the import icon in the popup opens a **new, dedicated tab** for the import utility.
+    * You can drag-and-drop or click to select a `datools-cache` JSON file.
+    * The imported data is instantly parsed and displayed in three panels, each with its own "Copy" button:
+        1.  **NYP/Free Titles & URLs**: Formatted as `Title | Artist` followed by the URL.
+        2.  **Paid Titles & URLs**: Formatted identically for paid releases.
+        3.  **All Tags**: A complete, de-duplicated, semicolon-separated list of all tags found in the file.
 
 ## How to Use
 
 1.  **Installation (for Development/Local Use):**
-    * Clone or download this repository to your local machine.
+    * Clone or download this repository.
     * Open Firefox and navigate to `about:debugging#/runtime/this-firefox`.
-    * Click the "Load Temporary Add-on..." button.
-    * Browse to the directory where you saved the extension files and select the `manifest.json` file.
+    * Click "Load Temporary Add-on..." and select the `manifest.json` file.
 
 2.  **Accessing Features:**
-    * Click the extension icon and select the desired feature; Or
-    * Navigate to any Bandcamp page or Archive.org download page.
-    * Right-click anywhere on the page to open the context menu.
-    * Look for the "Bandcamp Tools" or "Archive.org Tools" submenu.
-    * Select the desired action.
+    * Click the extension icon for the main popup menu.
+    * Right-click on a relevant page (Bandcamp or Archive.org) for the context menu.
+    * Use the **Import JSON** icon in the popup to open the dedicated import tool.
 
 ## Files Overview
 
-* **`manifest.json`**: Defines the extension's properties, permissions, and components. It specifies the background script, content scripts, and the browser action popup.
-* **`background.js`**: Contains the core logic for all features. It handles context menu creation and actions, browser action popup messages, tab querying and management, classification orchestration via script injection, and clipboard operations.
-* **`contentScript.js`**: Injected into Bandcamp album and track pages to analyze page content and determine if an item is "Paid," "Name Your Price" (NYP), or "Free." It communicates this classification back to `background.js`.
-* **`popup.html`**: Provides the HTML structure for the dropdown menu that appears when the extension's toolbar icon is clicked. This menu lists the available actions.
-* **`popup.js`**: The JavaScript file for `popup.html`. It listens for clicks on the menu items in the popup and sends messages to `background.js` to trigger the corresponding actions.
-* **`popup.css`**: Contains the CSS styles for `popup.html`, defining the appearance of the browser action popup menu (e.g., dark mode, button styling).
+* **`manifest.json`**: Defines the extension's properties, permissions, and components.
+* **`background.js`**: The core logic for all features, including context menus, script injection, data fetching, and caching.
+* **`contentScript.js`**: Injected into Bandcamp pages to determine their classification (Paid, NYP, or Free).
+* **`popup.html` / `popup.css` / `popup.js`**: The structure, style, and logic for the main browser action popup menu and its settings panel.
+* **`import.html` / `import.js`**: The new, dedicated page for the JSON import functionality.
+* **`logo.svg` / `json.svg` / `import.svg`**: Icons.
 
 ## Permissions Used
 
-This extension requests the following permissions, with explanations for why each is needed:
-
-* **`tabs`**:
-    * To query your open Bandcamp tabs (get their ID, URL, title, hidden/discarded state).
-    * To execute scripts within these tabs (e.g., `contentScript.js` for classification, or other scripts for download automation and data extraction).
-    * To reorder (sort) tabs.
-* **`contextMenus`**:
-    * To add the "Bandcamp Tools" and "Archive.org Tools" menus and their sub-options to the right-click context menu on web pages.
-* **`*://*.bandcamp.com/*`**:
-    * To allow the extension to run its `contentScript.js` specifically on Bandcamp pages.
-    * To enable `executeScript` and `fetch` calls to target Bandcamp pages for various functions.
-    * To ensure context menu items appear only on Bandcamp domains.
-* **`*://archive.org/download/*`**:
-    * To allow the extension to run scripts on Archive.org download pages to copy file lists.
-    * To ensure context menu items for Archive.org appear only on those pages.
-* **`clipboardWrite`**:
-    * To allow the extension to copy the collected tags, titles, and URLs directly to your system clipboard for easy pasting into other applications.
-* **`downloads`**:
-    * To allow the extension to download images.
-* **`storage`**:
-    * To save user settings (email and zip code) for the download helper.
+* **`tabs`**: To query, execute scripts in, and manage your open tabs.
+* **`contextMenus`**: To add the "Bandcamp Tools" and "Archive.org Tools" context menus.
+* **`*://*.bandcamp.com/*` / `*://archive.org/download/*`**: To allow the extension to run on these specific sites.
+* **`clipboardWrite`**: To copy the collected data (tags, URLs, etc.) to your clipboard.
+* **`downloads`**: To save images, album covers, and the exported JSON cache files.
+* **`storage`**: To save your settings (email, zip code, and toggles) locally.
 
 ## Known Issues & Limitations
-* **Language Dependency**: The extension identifies item types (e.g., "Name Your Price," "Paid") by searching for specific English text on the page. If your Bandcamp interface is set to a language other than English, you **must** manually edit the hardcoded text strings in `background.js` and `contentScript.js` to match the text in your language.
-* The automated download and data-extraction features rely on specific CSS selectors and page structures on Bandcamp. If Bandcamp updates its website, these parts of the extension might need to be updated in `background.js`.
-* The timing delays (`setTimeout`) in the download automation are generalized. On very slow connections or machines, they might occasionally be too short, potentially missing an element that hasn't loaded yet.
-* Download Album Covers seems to fail some specific pages, I have no idea why, as the HTML is the exact same. It will be missing some covers.
-
-## Future Ideas & Enhancements
-* User-configurable settings (e.g., for delays, output formats).
-* Option to specify download locations (if browser APIs ever permit this level of control for extensions easily).
-* A popup UI for more complex interactions or status display.
+* **Language Dependency**: The extension identifies item types (e.g., "Name Your Price," "Paid") by searching for specific English and Japanese text. If your Bandcamp interface is set to another language, you **must** manually edit the hardcoded text strings in `background.js` and `contentScript.js`.
+* The automated download and data-extraction features rely on specific page structures. If Bandcamp updates its website, these parts of the extension may need to be updated.
+* The timing delays (`setTimeout`) in the download automation are generalized. On very slow connections, they might occasionally be too short.
+* Download Album Covers sometimes fails on specific pages for various reasons, resulting in some missing covers.
 
 ## License
 This project is released into the public domain via [The Unlicense](https://unlicense.org/).
-
-This means it is free and unencumbered software released into the public domain. Anyone is free to copy, modify, publish, use, compile, sell, or distribute this software, either in source code form or as a compiled binary, for any purpose, commercial or non-commercial, and by any means.
-
-For the full license text, please see the `LICENSE` file in this repository.

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Import Cache</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="popup.css">
+</head>
+<body class="import-page-body">
+    <div class="import-container">
+        <header class="import-header">
+            <h1>Import JSON Cache</h1>
+            <p>Drag and drop your `datools-cache` file below</p>
+        </header>
+
+        <div id="drop-zone">
+            <p>Drag & drop a JSON file here or click to select</p>
+            <input type="file" id="fileInput" accept=".json" style="display: none;">
+        </div>
+
+        <div id="results-container" class="hidden-section">
+            <div class="result-panel">
+                <div class="panel-header">
+                    <h4>NYP/Free Titles & URLs</h4>
+                    <button class="copy-btn" data-target="nyp-output">Copy</button>
+                </div>
+                <textarea id="nyp-output" readonly></textarea>
+            </div>
+            <div class="result-panel">
+                <div class="panel-header">
+                    <h4>Paid Titles & URLs</h4>
+                    <button class="copy-btn" data-target="paid-output">Copy</button>
+                </div>
+                <textarea id="paid-output" readonly></textarea>
+            </div>
+            <div class="result-panel">
+                <div class="panel-header">
+                    <h4>All Tags</h4>
+                    <button class="copy-btn" data-target="tags-output">Copy</button>
+                </div>
+                <textarea id="tags-output" readonly></textarea>
+            </div>
+        </div>
+    </div>
+    <script src="import.js"></script>
+</body>
+</html>

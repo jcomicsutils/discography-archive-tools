@@ -7,6 +7,14 @@
 </head>
 <body>
     <div class="popup-container">
+        <div id="jsonIconContainer">
+            <button id="forceSaveJsonBtn" title="Force Save JSON Cache">
+                <img src="json.svg" alt="Save JSON" />
+            </button>
+            <button id="importJsonBtn" title="Import JSON Cache">
+                <img src="import.svg" alt="Import JSON" />
+            </button>
+        </div>
         <div id="optionsIconContainer">
             <button id="toggleOptionsBtn" title="Settings">⚙️</button>
         </div>
@@ -29,8 +37,9 @@
                 <li data-context="archive"><button id="copyArchiveTableFilesBtn">Copy Archive.org Files</button></li>
             </ul>
         </div>
-
+        
         <div id="optionsSection" class="hidden-section">
+            <button id="backToMainMenuFromOptionsBtn">← Back</button>
             <h3>Settings</h3>
             <div class="option-item">
                 <label for="emailInput">Email (for download):</label>
@@ -51,6 +60,10 @@
             <div class="option-item">
                 <input type="checkbox" id="disableHtmlEscapingInput">
                 <label for="disableHtmlEscapingInput" style="display: inline;">Disable HTML Escaping</label>
+            </div>
+            <div class="option-item">
+                <input type="checkbox" id="saveCacheToJsonInput">
+                <label for="saveCacheToJsonInput" style="display: inline;">Save cache to JSON</label>
             </div>
             <button id="saveSettingsBtn">Save Settings</button>
             <p id="statusMessage"></p>
