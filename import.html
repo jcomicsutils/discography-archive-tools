@@ -18,10 +18,20 @@
         </div>
 
         <div id="controls-container">
-            <input type="checkbox" id="format-html">
-            <label for="format-html" class="toggle-button">HTML</label>
-            <input type="checkbox" id="add-item-id">
-            <label for="add-item-id" class="toggle-button">Add item_id</label>
+            <div class="control-group">
+                <label for="sort-select" class="control-label">Sort by:</label>
+                <select id="sort-select" class="styled-select">
+                    <option value="artist">Artist</option>
+                    <option value="title">Title</option>
+                    <option value="item_id">ID</option>
+                </select>
+            </div>
+            <div id="other-controls">
+                <input type="checkbox" id="format-html">
+                <label for="format-html" class="toggle-button">HTML</label>
+                <input type="checkbox" id="add-item-id">
+                <label for="add-item-id" class="toggle-button">Add item_id</label>
+            </div>
         </div>
 
         <div id="results-container" class="hidden-section">

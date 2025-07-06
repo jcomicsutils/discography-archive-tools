@@ -1,5 +1,10 @@
 # Changelog
 
+### 2025-07-06
+#### Added
+ - **Sort Button on Import Page**: Added a "Sort" button to the "Import JSON" page, allowing users to sort the imported releases lists by **Artist**, **Title**, or **item_id**.
+
+---
 ### 2025-07-04
 #### Added
  - **JSON Cache Export**: Added an option in settings to automatically save the cache (including URL, classification, artist, title, and tags) to a `datools-cache/artist.json` file after a scan.

@@ -3,8 +3,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const fileInput = document.getElementById('fileInput');
     const resultsContainer = document.getElementById('results-container');
     const formatHtmlCheckbox = document.getElementById('format-html');
-    const addItemIdCheckbox = document.getElementById('add-item-id'); // New element
+    const addItemIdCheckbox = document.getElementById('add-item-id');
+    const sortSelect = document.getElementById('sort-select');
     let cachedData = [];
+    let currentSort = 'artist';
 
     dropZone.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('dragover', (e) => {
@@ -26,9 +28,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // Add event listeners for both checkboxes
     formatHtmlCheckbox.addEventListener('change', updateOutput);
     addItemIdCheckbox.addEventListener('change', updateOutput);
+    sortSelect.addEventListener('change', function() {
+        currentSort = this.value;
+        updateOutput();
+    });
 
     function handleFile(file) {
         if (file && file.type === 'application/json') {
@@ -51,24 +56,41 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateOutput() {
         if (cachedData.length === 0) return;
 
+        cachedData.sort((a, b) => {
+            if (currentSort === 'artist') {
+                const artistCompare = a.artist.localeCompare(b.artist, undefined, { sensitivity: 'base' });
+                if (artistCompare !== 0) {
+                    return artistCompare;
+                }
+                return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+            }
+
+            if (currentSort === 'title') {
+                return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+            }
+
+            if (currentSort === 'item_id') {
+                return a.item_id - b.item_id;
+            }
+
+            return 0;
+        });
+
         const isHtml = formatHtmlCheckbox.checked;
-        const addItemId = addItemIdCheckbox.checked; // Check status of new checkbox
+        const addItemId = addItemIdCheckbox.checked;
         const nypOutput = [];
         const paidOutput = [];
         const allOutput = [];
         const allTags = new Set();
 
         cachedData.forEach(item => {
-            // Create the item_id suffix if the box is checked and the id exists
             const itemIdSuffix = (addItemId && item.item_id) ? ` [${item.item_id}]` : '';
-            
+
             let entry;
             if (isHtml) {
-                // Append suffix to the link text for HTML format
                 const title = `${item.artist} - ${item.title}${itemIdSuffix}`;
                 entry = `<a href="${item.url}">${title}</a><br>\n`;
             } else {
-                // Append suffix to the title for plain text format
                 const title = `${item.title}${itemIdSuffix} | ${item.artist}`;
                 entry = `${title}\n${item.url}`;
             }
