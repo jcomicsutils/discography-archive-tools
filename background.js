@@ -631,7 +631,21 @@ async function copyAllKeywordsToClipboard() {
             }
         }
 
-        const artistNameForFile = urlMatch[1];
+        let artistNameForFile;
+        try {
+            const results = await browser.tabs.executeScript(notificationTabId, {
+                code: `(function() { const el = document.querySelector('#band-name-location span.title, .band-name, #band-name'); return el ? el.textContent.trim() : null; })();`
+            });
+            if (results && results[0]) {
+                artistNameForFile = results[0];
+            } else {
+                artistNameForFile = urlMatch[1]; // Fallback
+            }
+        } catch (e) {
+            console.error("ERROR: Could not get artist name for JSON cache.", e);
+            artistNameForFile = urlMatch[1]; // Fallback
+        }
+        
         await saveCacheToJSON(artistNameForFile, pageDataCache);
         if (allKeywordsCollected.length === 0) {
             await showPageNotification(notificationTabId, "No keywords found in any releases.", "error");
@@ -896,7 +910,21 @@ async function copyTitlesAndUrls(requestedType) {
             }
         }
 
-        const artistNameForFile = urlMatch[1];
+        let artistNameForFile;
+        try {
+            const results = await browser.tabs.executeScript(notificationTabId, {
+                code: `(function() { const el = document.querySelector('#band-name-location span.title, .band-name, #band-name'); return el ? el.textContent.trim() : null; })();`
+            });
+            if (results && results[0]) {
+                artistNameForFile = results[0];
+            } else {
+                artistNameForFile = urlMatch[1]; // Fallback
+            }
+        } catch (e) {
+            console.error("ERROR: Could not get artist name for JSON cache.", e);
+            artistNameForFile = urlMatch[1]; // Fallback
+        }
+        
         await saveCacheToJSON(artistNameForFile, pageDataCache);
 
         if (outputLines.length > 0) {
@@ -1184,7 +1212,7 @@ async function downloadAllAlbumCovers() {
     let artistName;
     try {
         const results = await browser.tabs.executeScript(activeTab.id, {
-            code: `(function() { const el = document.querySelector('.band-name, #band-name, span.title'); return el ? el.textContent.trim() : null; })();`
+            code: `(function() { const el = document.querySelector('#band-name-location span.title, .band-name, #band-name'); return el ? el.textContent.trim() : null; })();`
         });
         if (results && results[0]) {
             artistName = results[0];
@@ -1349,8 +1377,7 @@ async function downloadAllAlbumCovers() {
         }
     }
     
-    const artistNameForFile = urlMatch[1];
-    await saveCacheToJSON(artistNameForFile, pageDataCache);
+    await saveCacheToJSON(artistName, pageDataCache);
     
     setTimeout(async () => {
          await showPageNotification(activeTab.id, `Cover download process complete. Check your downloads.`, "success", 5000);
@@ -1886,25 +1913,29 @@ async function saveCacheToJSON(artist, cacheData, forceSave = false) {
     }
 
     const skipHtmlEscaping = settings.disableHtmlEscaping;
-    const dataToSave = [];
+    const releaseList = [];
 
     for (const url in cacheData) {
-        if (cacheData.hasOwnProperty(url)) {
+        if (cacheData.hasOwnProperty(url) && cacheData[url]) { // Check if item is not null/undefined
             const item = cacheData[url];
-            dataToSave.push({
+            releaseList.push({
                 url: url,
                 title: escapeHtml(item.title, skipHtmlEscaping),
                 artist: escapeHtml(item.artist, skipHtmlEscaping),
                 classification: item.classification,
                 tags: item.keywords,
-                item_id: item.item_id // --- This line is added ---
+                item_id: item.item_id
             });
         }
     }
 
-    if (dataToSave.length === 0) {
+    if (releaseList.length === 0) {
         return;
     }
+
+    const dataToSave = {
+        [artist]: releaseList
+    };
 
     const jsonString = JSON.stringify(dataToSave, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
@@ -1925,7 +1956,6 @@ async function saveCacheToJSON(artist, cacheData, forceSave = false) {
     });
 }
 
-// --- NEW FUNCTION ---
 async function forceSaveCacheToJSON() {
     console.log("INFO: forceSaveCacheToJSON: Starting function execution...");
     let activeTab;
@@ -1947,6 +1977,21 @@ async function forceSaveCacheToJSON() {
     if (!urlMatch) {
         await showPageNotification(activeTab.id, "This feature only works on an artist's main page.", "error");
         return;
+    }
+    
+    let artistNameForFile;
+     try {
+        const results = await browser.tabs.executeScript(activeTab.id, {
+            code: `(function() { const el = document.querySelector('#band-name-location span.title, .band-name, #band-name'); return el ? el.textContent.trim() : null; })();`
+        });
+        if (results && results[0]) {
+            artistNameForFile = results[0];
+        } else {
+            artistNameForFile = urlMatch[1]; // Fallback
+        }
+    } catch (e) {
+        console.error("ERROR: Could not get artist name for forced JSON save.", e);
+        artistNameForFile = urlMatch[1]; // Fallback
     }
 
     pageDataCache = {};
@@ -2046,7 +2091,6 @@ async function forceSaveCacheToJSON() {
         }
     }
 
-    const artistNameForFile = urlMatch[1];
     await saveCacheToJSON(artistNameForFile, pageDataCache, true); // forceSave = true
     await showPageNotification(activeTab.id, `JSON cache file for "${artistNameForFile}" has been saved!`, "success", 4000);
 }

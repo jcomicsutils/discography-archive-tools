@@ -1,5 +1,14 @@
 # Changelog
 
+### 2025-07-12
+#### Added
+* **Discography Titles Panel**: On the "Import JSON" page, a new panel has been added that automatically generates a list of discography category names (e.g., `Artist Discography`, `(Streaming) Artist Discography`, etc.) if the imported cache file contains a top-level artist name.
+#### Changed
+* **JSON Cache Structure**: The exported JSON cache file now has a new structure. It uses the main artist's name as a top-level key, which contains the list of all releases.
+* **JSON Import Backward Compatibility**: The "Import JSON" page is backward compatible and can correctly read both the new cache format (with a top-level artist key) and the old format (a simple list).
+* **Artist Name in Tags**: When importing a cache file with the new format, the top-level artist's name is now automatically added to the "All Tags" list.
+
+---
 ### 2025-07-06
 #### Added
  - **Sort Button on Import Page**: Added a "Sort" button to the "Import JSON" page, allowing users to sort the imported releases lists by **Artist**, **Title**, or **item_id**.

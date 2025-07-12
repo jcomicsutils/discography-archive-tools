@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const addItemIdCheckbox = document.getElementById('add-item-id');
     const sortSelect = document.getElementById('sort-select');
     let cachedData = [];
+    let topLevelArtist = null; // Variable to store the top-level artist name
     let currentSort = 'artist';
 
     dropZone.addEventListener('click', () => fileInput.click());
@@ -40,11 +41,27 @@ document.addEventListener('DOMContentLoaded', function () {
             const reader = new FileReader();
             reader.onload = function(event) {
                 try {
-                    cachedData = JSON.parse(event.target.result);
+                    topLevelArtist = null; // Reset on each new file import
+                    const parsedJson = JSON.parse(event.target.result);
+                    
+                    // Check for new format (object with artist key) vs old format (array)
+                    if (Array.isArray(parsedJson)) {
+                        cachedData = parsedJson; // Old format
+                    } else if (typeof parsedJson === 'object' && parsedJson !== null && Object.keys(parsedJson).length > 0) {
+                        // New format: get the artist name (the key) and the release list (the value)
+                        topLevelArtist = Object.keys(parsedJson)[0]; 
+                        cachedData = Object.values(parsedJson)[0];
+                        if (!Array.isArray(cachedData)) {
+                             throw new Error("JSON object value is not an array.");
+                        }
+                    } else {
+                        cachedData = []; // Handle empty or unrecognized JSON
+                    }
                     updateOutput();
                     resultsContainer.classList.remove('hidden-section');
                 } catch (err) {
-                    alert('Error: Invalid JSON file.');
+                    alert('Error: Invalid JSON file. ' + err.message);
+                    console.error("Import error:", err);
                 }
             };
             reader.readAsText(file);
@@ -54,7 +71,22 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateOutput() {
-        if (cachedData.length === 0) return;
+        const discographyTitlesOutput = document.getElementById('discography-titles-output');
+
+        if (topLevelArtist) {
+            const titles = [
+                `${topLevelArtist} Streaming Discography`,
+                `${topLevelArtist} Discography`,
+                `(Streaming) ${topLevelArtist} Discography`,
+                `(Streaming) (Netlabel) ${topLevelArtist} Discography`,
+                `(Streaming) (Label) ${topLevelArtist} Discography`,
+                `(Netlabel) ${topLevelArtist} Discography`,
+                `(Label) ${topLevelArtist} Discography`
+            ];
+            discographyTitlesOutput.value = titles.join('\n');
+        } else {
+            discographyTitlesOutput.value = "artist not found";
+        }
 
         cachedData.sort((a, b) => {
             if (currentSort === 'artist') {
@@ -82,6 +114,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const paidOutput = [];
         const allOutput = [];
         const allTags = new Set();
+
+        if (topLevelArtist) {
+            allTags.add(topLevelArtist.toLowerCase());
+        }
 
         cachedData.forEach(item => {
             const itemIdSuffix = (addItemId && item.item_id) ? ` [${item.item_id}]` : '';
