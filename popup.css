@@ -128,8 +128,9 @@ ul#popup-menu button:hover, #optionsSection button#saveSettingsBtn:hover {
 #statusMessage.error { color: #e06c75; }
 
 /* Visibility */
-.hidden-section { display: none; }
-.active-section { display: block; }
+.hidden { 
+    display: none; 
+}
 
 /* Compound Button */
 .compound-button-li { display: flex; }

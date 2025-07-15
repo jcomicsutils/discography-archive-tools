@@ -74,6 +74,148 @@ function sanitizeFilename(name) {
                .trim();
 }
 
+// NEW: Centralized data extraction function
+async function extractPageData(htmlText, initialArtist) {
+    const data = {
+        title: "Failed to fetch title",
+        artist: initialArtist,
+        classification: 'paid',
+        keywords: [],
+        item_id: null,
+        about: null,
+        credits: null,
+        license: null,
+        datePublished: null,
+        coverUrl_0: null,
+        trackinfo: []
+    };
+
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, "text/html");
+
+        // From ld+json
+        const ldJsonScript = doc.querySelector('script[type="application/ld+json"]');
+        if (ldJsonScript && ldJsonScript.textContent) {
+            try {
+                const jsonData = JSON.parse(ldJsonScript.textContent);
+                if (jsonData.name) data.title = jsonData.name;
+                if (jsonData.byArtist && jsonData.byArtist.name) data.artist = jsonData.byArtist.name;
+                if (jsonData.keywords && Array.isArray(jsonData.keywords)) {
+                    data.keywords = jsonData.keywords.filter(kw => typeof kw === 'string');
+                }
+                if (jsonData.datePublished) data.datePublished = jsonData.datePublished;
+            } catch (e) {
+                console.error(`ERROR: Failed to parse ld+json.`, e);
+            }
+        }
+
+        // From meta tags
+        const metaTag = doc.querySelector('meta[name="bc-page-properties"]');
+        if (metaTag) {
+            try {
+                const metaContent = metaTag.getAttribute('content').replace(/&quot;/g, '"');
+                const pageProps = JSON.parse(metaContent);
+                if (pageProps && pageProps.item_id) {
+                    data.item_id = pageProps.item_id;
+                }
+            } catch (e) {
+                console.error(`ERROR: Failed to parse bc-page-properties meta tag.`, e);
+            }
+        }
+
+        // About section
+        const aboutEl = doc.querySelector('.tralbumData.tralbum-about');
+        if (aboutEl) data.about = aboutEl.textContent.trim();
+
+        // Credits section
+        const creditsEl = doc.querySelector('.tralbumData.tralbum-credits');
+        if (creditsEl) data.credits = creditsEl.textContent.trim();
+
+        // License section
+        const licenseEl = doc.querySelector('#license.info.license');
+        if (licenseEl) data.license = licenseEl.textContent.trim().replace(/\s+/g, ' ');
+
+        // Classification
+        const nypEl = doc.querySelector('span.buyItemExtra.buyItemNyp.secondaryText');
+        if (nypEl) {
+            const txt = nypEl.textContent.trim().toLowerCase();
+            if (txt === 'name your price' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
+                data.classification = 'nyp';
+            }
+        }
+        if (data.classification === 'paid') {
+            const h4El = doc.querySelector('h4.ft.compound-button.main-button');
+            if (h4El) {
+                const buttonEl = h4El.querySelector('button.download-link.buy-link');
+                if (buttonEl) {
+                    const buttonText = buttonEl.textContent.trim().toLowerCase();
+                    if (buttonText === 'free download' || buttonText === '無料ダウンロード') {
+                        data.classification = 'free';
+                    }
+                }
+            }
+        }
+
+        // Cover URL (_0 version)
+        const coverLinkEl = doc.querySelector('a.popupImage');
+        if (coverLinkEl && coverLinkEl.href) {
+            const standardCoverUrl = coverLinkEl.href;
+            try {
+                const urlObj = new URL(standardCoverUrl);
+                const urlPathParts = urlObj.pathname.split('/');
+                const fileNameWithExt = urlPathParts[urlPathParts.length - 1];
+                const dotIndex = fileNameWithExt.lastIndexOf('.');
+                const fileNameNoExt = (dotIndex > -1) ? fileNameWithExt.substring(0, dotIndex) : fileNameWithExt;
+                const lastUnderscoreIdx = fileNameNoExt.lastIndexOf('_');
+
+                if (lastUnderscoreIdx > -1) {
+                    const numberPart = fileNameNoExt.substring(0, lastUnderscoreIdx);
+                    const baseImgDomainPath = `${urlObj.protocol}//${urlObj.hostname}${urlPathParts.slice(0, -1).join('/')}/`;
+                    data.coverUrl_0 = `${baseImgDomainPath}${numberPart}_0`;
+                }
+            } catch(e) {
+                console.error("ERROR: Could not create _0 cover URL.", e);
+            }
+        }
+        
+        // --- Track Information Scraping ---
+        const trackRows = doc.querySelectorAll('tr.track_row_view');
+        trackRows.forEach(row => {
+            const track = {
+                title: null,
+                duration: null,
+                lyrics: null
+            };
+
+            const titleEl = row.querySelector('span.track-title');
+            if (titleEl) track.title = titleEl.textContent.trim();
+
+            const durationEl = row.querySelector('span.time.secondaryText');
+            if (durationEl) track.duration = durationEl.textContent.trim();
+
+            const trackNumMatch = row.getAttribute('rel')?.match(/tracknum=(\d+)/);
+            if (trackNumMatch && trackNumMatch[1]) {
+                const trackNum = trackNumMatch[1];
+                const lyricsRow = doc.querySelector(`#lyrics_row_${trackNum}`);
+                if (lyricsRow) {
+                    const lyricsContainer = lyricsRow.querySelector('td > div');
+                    if (lyricsContainer) track.lyrics = lyricsContainer.textContent.trim();
+                }
+            }
+
+            if(track.title && track.duration) {
+                data.trackinfo.push(track);
+            }
+        });
+
+
+    } catch (e) {
+        console.error("ERROR: Failed during page data extraction.", e);
+    }
+
+    return data;
+}
 
 // --- CSS for the page notification toast ---
 const pageNotificationCSS = `
@@ -499,6 +641,21 @@ async function copyAllKeywordsToClipboard() {
         pageDataCache = {};
         console.log(`INFO: copyAllKeywordsToClipboard: Detected artist page. Cache has been reset.`);
 
+        let artistNameForFile;
+        try {
+            const results = await browser.tabs.executeScript(notificationTabId, {
+                code: `(function() { const el = document.querySelector('#band-name-location span.title, .band-name, #band-name'); return el ? el.textContent.trim() : null; })();`
+            });
+            if (results && results[0]) {
+                artistNameForFile = results[0];
+            } else {
+                artistNameForFile = urlMatch[1]; // Fallback
+            }
+        } catch (e) {
+            console.error("ERROR: Could not get artist name for JSON cache.", e);
+            artistNameForFile = urlMatch[1]; // Fallback
+        }
+
         await showPageNotification(notificationTabId, "Scanning artist page for releases...", "success", 2000);
 
         let albumUrls;
@@ -544,72 +701,9 @@ async function copyAllKeywordsToClipboard() {
                         const response = await fetch(url);
                         if (!response.ok) return;
                         const htmlText = await response.text();
-                        
-                        pageDataCache[url] = {};
-
-                        // --- Extract item_id from meta tag ---
-                        const metaTagMatch = htmlText.match(/<meta name="bc-page-properties" content="([^"]+)">/);
-                        let itemId = null;
-                        if (metaTagMatch && metaTagMatch[1]) {
-                            try {
-                                const metaContent = metaTagMatch[1].replace(/&quot;/g, '"');
-                                const pageProps = JSON.parse(metaContent);
-                                if (pageProps && pageProps.item_id) {
-                                    itemId = pageProps.item_id;
-                                }
-                            } catch (e) {
-                                console.error(`ERROR: Failed to parse bc-page-properties meta tag for ${url}`, e);
-                            }
-                        }
-                        pageDataCache[url].item_id = itemId;
-                        // --- End item_id extraction ---
-
-                        const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
-                        let releaseTitle = "Untitled";
-                        let releaseArtist = urlMatch[1]; 
-                        let tempKeywords = [];
-                        if (jsonMatch && jsonMatch[1]) {
-                             try {
-                                const jsonData = JSON.parse(jsonMatch[1]);
-                                if (jsonData.name) releaseTitle = jsonData.name;
-                                if (jsonData.byArtist && jsonData.byArtist.name) releaseArtist = jsonData.byArtist.name;
-                                if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) tempKeywords = jsonData.keywords;
-                            } catch (e) { console.error(`ERROR: Failed to parse ld+json for ${url}.`, e); }
-                        }
-                        pageDataCache[url].title = releaseTitle;
-                        pageDataCache[url].artist = releaseArtist;
-                        pageDataCache[url].keywords = tempKeywords.filter(kw => typeof kw === 'string');
-
-                        let classification = 'paid';
-                        const nypMatch = htmlText.match(/<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
-                        if (nypMatch && nypMatch[1]) {
-                            const txt = nypMatch[1].trim().toLowerCase();
-                            if (txt === 'name your price' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
-                                classification = 'nyp';
-                            }
-                        }
-                        if (classification === 'paid') {
-                            const h4Match = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>([\s\S]*?)<\/h4>/i);
-                            if (h4Match && h4Match[1]) {
-                                const buttonMatch = h4Match[1].match(/<button[^>]*>([\s\S]*?)<\/button>/i);
-                                if (buttonMatch && buttonMatch[1]) {
-                                    const buttonText = buttonMatch[1].trim().toLowerCase();
-                                    if (buttonText === 'free download' || buttonText === '無料ダウンロード') {
-                                        classification = 'free';
-                                    }
-                                }
-                            }
-                        }
-                        pageDataCache[url].classification = classification;
-
+                        pageDataCache[url] = await extractPageData(htmlText, artistNameForFile);
                     } catch(e) {
                         console.error(`ERROR: Failed to fetch or process data for ${url}:`, e);
-                        if (!pageDataCache[url]) pageDataCache[url] = {};
-                        pageDataCache[url].keywords = []; 
-                        pageDataCache[url].classification = 'paid';
-                        pageDataCache[url].title = 'Error';
-                        pageDataCache[url].artist = 'Error';
-                        pageDataCache[url].item_id = null;
                     }
                 }
             });
@@ -629,21 +723,6 @@ async function copyAllKeywordsToClipboard() {
                 await showPageNotification(notificationTabId, `(${pagesScanned}/${albumUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
                 await new Promise(r => setTimeout(r, 5000));
             }
-        }
-
-        let artistNameForFile;
-        try {
-            const results = await browser.tabs.executeScript(notificationTabId, {
-                code: `(function() { const el = document.querySelector('#band-name-location span.title, .band-name, #band-name'); return el ? el.textContent.trim() : null; })();`
-            });
-            if (results && results[0]) {
-                artistNameForFile = results[0];
-            } else {
-                artistNameForFile = urlMatch[1]; // Fallback
-            }
-        } catch (e) {
-            console.error("ERROR: Could not get artist name for JSON cache.", e);
-            artistNameForFile = urlMatch[1]; // Fallback
         }
         
         await saveCacheToJSON(artistNameForFile, pageDataCache);
@@ -764,152 +843,7 @@ async function copyTitlesAndUrls(requestedType) {
     if (urlMatch) {
         pageDataCache = {};
         console.log(`INFO: copyTitlesAndUrls: Detected artist page. Cache has been reset.`);
-        await showPageNotification(notificationTabId, "Scanning artist page for releases...", "success", 2000);
-
-        let releases;
-        try {
-            const results = await browser.tabs.executeScript(notificationTabId, {
-                code: `
-                    (function() {
-                        const releaseData = [];
-                        const mainArtistEl = document.querySelector('#band-name-location span.title, #band-name, .band-name');
-                        const mainArtist = mainArtistEl ? mainArtistEl.textContent.trim() : '';
-                        
-                        const links = document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a');
-                        
-                        links.forEach(a => {
-                            if (!a.href || !(a.href.includes('/album/') || a.href.includes('/track/'))) return;
-                            const titleEl = a.querySelector('p.title, .item_link_title');
-                            if (!titleEl) return;
-                            let releaseTitle, releaseArtist;
-                            const artistOverrideEl = titleEl.querySelector('span.artist-override');
-                            if (artistOverrideEl) {
-                                releaseArtist = artistOverrideEl.textContent.trim();
-                                const tempTitleEl = titleEl.cloneNode(true);
-                                tempTitleEl.querySelector('span.artist-override').remove();
-                                releaseTitle = tempTitleEl.textContent.trim();
-                            } else {
-                                releaseTitle = titleEl.textContent.trim();
-                                releaseArtist = mainArtist;
-                            }
-                            if (!releaseData.some(r => r.url === a.href)) {
-                                releaseData.push({ title: releaseTitle, artist: releaseArtist, url: a.href });
-                            }
-                        });
-                        return releaseData;
-                    })();
-                `
-            });
-            releases = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
-        } catch (e) {
-            console.error("ERROR: copyTitlesAndUrls: Failed to inject script to scrape release info.", e);
-            await showPageNotification(notificationTabId, "Error scanning page for releases.", "error");
-            return;
-        }
-
-        if (releases.length === 0) {
-            await showPageNotification(notificationTabId, "No album or track links found on this page.", "error");
-            return;
-        }
-
-        await showPageNotification(notificationTabId, `Found ${releases.length} releases. Fetching classification data...`, "success", 3000);
         
-        const BATCH_SIZE = 10;
-        let outputLines = [];
-        let pagesScanned = 0;
-
-        for (let i = 0; i < releases.length; i += BATCH_SIZE) {
-            const batch = releases.slice(i, i + BATCH_SIZE);
-            
-            const batchPromises = batch.map(async (release) => {
-                const url = release.url;
-                if (!pageDataCache[url]) {
-                    try {
-                        const response = await fetch(url);
-                        if (!response.ok) return;
-                        const htmlText = await response.text();
-                        
-                        pageDataCache[url] = {};
-                        pageDataCache[url].title = release.title;
-                        pageDataCache[url].artist = release.artist;
-
-                        // --- Extract item_id from meta tag ---
-                        const metaTagMatch = htmlText.match(/<meta name="bc-page-properties" content="([^"]+)">/);
-                        let itemId = null;
-                        if (metaTagMatch && metaTagMatch[1]) {
-                            try {
-                                const metaContent = metaTagMatch[1].replace(/&quot;/g, '"');
-                                const pageProps = JSON.parse(metaContent);
-                                if (pageProps && pageProps.item_id) {
-                                    itemId = pageProps.item_id;
-                                }
-                            } catch (e) {
-                                console.error(`ERROR: Failed to parse bc-page-properties meta tag for ${url}`, e);
-                            }
-                        }
-                        pageDataCache[url].item_id = itemId;
-                        // --- End item_id extraction ---
-
-                        let classification = 'paid';
-                        const nypMatch = htmlText.match(/<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
-                        if (nypMatch && nypMatch[1]) {
-                            const txt = nypMatch[1].trim().toLowerCase();
-                            if (txt === 'name your price' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
-                                classification = 'nyp';
-                            }
-                        }
-                        if (classification === 'paid') {
-                            const h4Match = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>([\s\S]*?)<\/h4>/i);
-                            if (h4Match && h4Match[1]) {
-                                const buttonMatch = h4Match[1].match(/<button[^>]*>([\s\S]*?)<\/button>/i);
-                                if (buttonMatch && buttonMatch[1]) {
-                                    const buttonText = buttonMatch[1].trim().toLowerCase();
-                                    if (buttonText === 'free download' || buttonText === '無料ダウンロード') {
-                                        classification = 'free';
-                                    }
-                                }
-                            }
-                        }
-                        pageDataCache[url].classification = classification;
-
-                    } catch (e) {
-                        console.error(`ERROR: Failed to fetch classification for ${url}:`, e);
-                        if (!pageDataCache[url]) pageDataCache[url] = {};
-                        pageDataCache[url].classification = 'paid';
-                        pageDataCache[url].item_id = null;
-                    }
-                }
-            });
-
-            await Promise.all(batchPromises);
-
-            for (const release of batch) {
-                const data = pageDataCache[release.url];
-                if (!data) continue;
-                
-                let includePage = false;
-                if (requestedType === 'nypFree' && (data.classification === 'nyp' || data.classification === 'free')) {
-                    includePage = true;
-                } else if (requestedType === 'paid' && data.classification === 'paid') {
-                    includePage = true;
-                }
-                
-                if (includePage) {
-                    const formattedTitle = data.artist ? `${data.title} | ${data.artist}` : data.title;
-                    outputLines.push(escapeHtml(formattedTitle, skipHtmlEscaping));
-                    outputLines.push(release.url);
-                }
-            }
-            pagesScanned += batch.length;
-            if (i + BATCH_SIZE < releases.length) {
-                await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${releases.length} releases...`, "success", 2000);
-            }
-            if (releases.length > 100 && (i + BATCH_SIZE < releases.length)) {
-                await showPageNotification(notificationTabId, `(${pagesScanned}/${releases.length}) Pausing for 5s to avoid errors...`, "success", 4800);
-                await new Promise(r => setTimeout(r, 5000));
-            }
-        }
-
         let artistNameForFile;
         try {
             const results = await browser.tabs.executeScript(notificationTabId, {
@@ -925,6 +859,86 @@ async function copyTitlesAndUrls(requestedType) {
             artistNameForFile = urlMatch[1]; // Fallback
         }
         
+        await showPageNotification(notificationTabId, "Scanning artist page for releases...", "success", 2000);
+
+        let releaseUrls;
+        try {
+            const results = await browser.tabs.executeScript(notificationTabId, {
+                code: `
+                    (function() {
+                        const links = new Set();
+                        document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a').forEach(a => {
+                            if (a.href && (a.href.includes('/album/') || a.href.includes('/track/'))) {
+                                links.add(a.href);
+                            }
+                        });
+                        return Array.from(links);
+                    })();
+                `
+            });
+            releaseUrls = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
+        } catch (e) {
+            console.error("ERROR: copyTitlesAndUrls: Failed to inject script to scrape release info.", e);
+            await showPageNotification(notificationTabId, "Error scanning page for releases.", "error");
+            return;
+        }
+
+        if (releaseUrls.length === 0) {
+            await showPageNotification(notificationTabId, "No album or track links found on this page.", "error");
+            return;
+        }
+
+        await showPageNotification(notificationTabId, `Found ${releaseUrls.length} releases. Fetching data...`, "success", 3000);
+        
+        const BATCH_SIZE = 10;
+        let outputLines = [];
+        let pagesScanned = 0;
+
+        for (let i = 0; i < releaseUrls.length; i += BATCH_SIZE) {
+            const batch = releaseUrls.slice(i, i + BATCH_SIZE);
+            
+            const batchPromises = batch.map(async (url) => {
+                if (!pageDataCache[url]) {
+                    try {
+                        const response = await fetch(url);
+                        if (!response.ok) return;
+                        const htmlText = await response.text();
+                        pageDataCache[url] = await extractPageData(htmlText, artistNameForFile);
+                    } catch (e) {
+                        console.error(`ERROR: Failed to fetch data for ${url}:`, e);
+                    }
+                }
+            });
+
+            await Promise.all(batchPromises);
+
+            for (const url of batch) {
+                const data = pageDataCache[url];
+                if (!data) continue;
+                
+                let includePage = false;
+                if (requestedType === 'nypFree' && (data.classification === 'nyp' || data.classification === 'free')) {
+                    includePage = true;
+                } else if (requestedType === 'paid' && data.classification === 'paid') {
+                    includePage = true;
+                }
+                
+                if (includePage) {
+                    const formattedTitle = data.artist ? `${data.title} | ${data.artist}` : data.title;
+                    outputLines.push(escapeHtml(formattedTitle, skipHtmlEscaping));
+                    outputLines.push(url);
+                }
+            }
+            pagesScanned += batch.length;
+            if (i + BATCH_SIZE < releaseUrls.length) {
+                await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${releaseUrls.length} releases...`, "success", 2000);
+            }
+            if (releaseUrls.length > 100 && (i + BATCH_SIZE < releaseUrls.length)) {
+                await showPageNotification(notificationTabId, `(${pagesScanned}/${releaseUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
+                await new Promise(r => setTimeout(r, 5000));
+            }
+        }
+        
         await saveCacheToJSON(artistNameForFile, pageDataCache);
 
         if (outputLines.length > 0) {
@@ -938,8 +952,6 @@ async function copyTitlesAndUrls(requestedType) {
             const typeString = requestedType === 'nypFree' ? 'NYP/Free' : 'Paid';
             await showPageNotification(notificationTabId, `No ${typeString} releases found to copy.`, "error");
         }
-    } else {
-        // Fallback for scanning open tabs remains the same
     }
 }
 
@@ -1212,7 +1224,7 @@ async function downloadAllAlbumCovers() {
     let artistName;
     try {
         const results = await browser.tabs.executeScript(activeTab.id, {
-            code: `(function() { const el = document.querySelector('#band-name-location span.title, .band-name, #band-name'); return el ? el.textContent.trim() : null; })();`
+            code: `(function() { const el = document.querySelector('.band-name, #band-name, span.title'); return el ? el.textContent.trim() : null; })();`
         });
         if (results && results[0]) {
             artistName = results[0];
@@ -1259,67 +1271,11 @@ async function downloadAllAlbumCovers() {
                         return;
                     }
                     const htmlText = await response.text();
-                    
-                    pageDataCache[url] = {};
-
-                    // --- Extract item_id from meta tag ---
-                    const metaTagMatch = htmlText.match(/<meta name="bc-page-properties" content="([^"]+)">/);
-                    let itemId = null;
-                    if (metaTagMatch && metaTagMatch[1]) {
-                        try {
-                            const metaContent = metaTagMatch[1].replace(/&quot;/g, '"');
-                            const pageProps = JSON.parse(metaContent);
-                            if (pageProps && pageProps.item_id) {
-                                itemId = pageProps.item_id;
-                            }
-                        } catch (e) {
-                            console.error(`ERROR: Failed to parse bc-page-properties meta tag for ${url}`, e);
-                        }
-                    }
-                    pageDataCache[url].item_id = itemId;
-                    // --- End item_id extraction ---
-
-                    const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
-                    let releaseTitle = "Untitled", releaseArtist = artistName, tempKeywords = [];
-                    if (jsonMatch && jsonMatch[1]) {
-                        try {
-                            const jsonData = JSON.parse(jsonMatch[1]);
-                            if (jsonData.name) releaseTitle = jsonData.name;
-                            if (jsonData.byArtist && jsonData.byArtist.name) releaseArtist = jsonData.byArtist.name;
-                            if (jsonData && jsonData.keywords && Array.isArray(jsonData.keywords)) tempKeywords = jsonData.keywords;
-                        } catch (e) { console.error(`ERROR: Failed to parse ld+json for ${url}.`, e); }
-                    }
-                    pageDataCache[url].title = releaseTitle;
-                    pageDataCache[url].artist = releaseArtist;
-                    pageDataCache[url].keywords = tempKeywords.filter(kw => typeof kw === 'string');
-                    
-                    let classification = 'paid';
-                    const nypMatch = htmlText.match(/<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
-                    if (nypMatch && nypMatch[1]) {
-                        const txt = nypMatch[1].trim().toLowerCase();
-                        if (txt === 'name your price' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
-                            classification = 'nyp';
-                        }
-                    }
-                    if (classification === 'paid') {
-                        const h4Match = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>([\s\S]*?)<\/h4>/i);
-                        if (h4Match && h4Match[1]) {
-                            const buttonMatch = h4Match[1].match(/<button[^>]*>([\s\S]*?)<\/button>/i);
-                            if (buttonMatch && buttonMatch[1]) {
-                                const buttonText = buttonMatch[1].trim().toLowerCase();
-                                if (buttonText === 'free download' || buttonText === '無料ダウンロード') {
-                                    classification = 'free';
-                                }
-                            }
-                        }
-                    }
-                    pageDataCache[url].classification = classification;
-                    const coverLinkMatch = htmlText.match(/<a class="popupImage" href="([^"]+)">/);
-                    pageDataCache[url].coverUrl = (coverLinkMatch && coverLinkMatch[1]) ? coverLinkMatch[1] : null;
+                    pageDataCache[url] = await extractPageData(htmlText, artistName);
                 }
                 
                 const data = pageDataCache[url];
-                if (!data || !data.coverUrl) {
+                if (!data || !data.coverUrl_0) {
                      console.warn(`WARN: No cover link found in cache for page ${url}. Skipping cover.`);
                      return;
                 }
@@ -1329,20 +1285,7 @@ async function downloadAllAlbumCovers() {
                 const finalAlbumFilename = `${data.artist} - ${truncatedTitle}`;
                 const sanitizedAlbumTitle = sanitizeFilename(finalAlbumFilename);
 
-                const urlObj = new URL(data.coverUrl);
-                const urlPathParts = urlObj.pathname.split('/');
-                const fileNameNoExt = urlPathParts[urlPathParts.length - 1].split('.')[0];
-                const lastUnderscoreIdx = fileNameNoExt.lastIndexOf('_');
-
-                if (lastUnderscoreIdx === -1) {
-                     console.warn(`WARN: Cannot find '_' in filename to create _0 version for ${url}.`);
-                     return;
-                }
-
-                const numberPart = fileNameNoExt.substring(0, lastUnderscoreIdx);
-                const baseImgDomainPath = `${urlObj.protocol}//${urlObj.hostname}${urlPathParts.slice(0, -1).join('/')}/`;
-                const highResImageUrl = `${baseImgDomainPath}${numberPart}_0`;
-
+                const highResImageUrl = data.coverUrl_0;
                 let detectedExtension = 'jpg';
                 try {
                     let headResponse = await fetch(highResImageUrl, { method: 'HEAD' });
@@ -1924,7 +1867,13 @@ async function saveCacheToJSON(artist, cacheData, forceSave = false) {
                 artist: escapeHtml(item.artist, skipHtmlEscaping),
                 classification: item.classification,
                 tags: item.keywords,
-                item_id: item.item_id
+                item_id: item.item_id,
+                datePublished: item.datePublished,
+                about: item.about,
+                credits: item.credits,
+                license: item.license,
+                coverUrl_0: item.coverUrl_0,
+                trackinfo: item.trackinfo
             });
         }
     }
@@ -2026,57 +1975,8 @@ async function forceSaveCacheToJSON() {
                     const response = await fetch(url);
                     if (!response.ok) return;
                     const htmlText = await response.text();
-                    pageDataCache[url] = {};
-
-                    // --- Extract item_id from meta tag ---
-                    const metaTagMatch = htmlText.match(/<meta name="bc-page-properties" content="([^"]+)">/);
-                    let itemId = null;
-                    if (metaTagMatch && metaTagMatch[1]) {
-                        try {
-                            const metaContent = metaTagMatch[1].replace(/&quot;/g, '"');
-                            const pageProps = JSON.parse(metaContent);
-                            if (pageProps && pageProps.item_id) {
-                                itemId = pageProps.item_id;
-                            }
-                        } catch (e) {
-                            console.error(`ERROR: Failed to parse bc-page-properties meta tag for ${url}`, e);
-                        }
-                    }
-                    pageDataCache[url].item_id = itemId;
-                    // --- End item_id extraction ---
-
-                    const jsonMatch = htmlText.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
-                    let releaseTitle = "Untitled", releaseArtist = urlMatch[1], tempKeywords = [];
-                    if (jsonMatch && jsonMatch[1]) {
-                         try {
-                            const jsonData = JSON.parse(jsonMatch[1]);
-                            if (jsonData.name) releaseTitle = jsonData.name;
-                            if (jsonData.byArtist && jsonData.byArtist.name) releaseArtist = jsonData.byArtist.name;
-                            if (jsonData.keywords) tempKeywords = jsonData.keywords;
-                        } catch (e) { console.error(`ERROR: ld+json parse failed for ${url}.`, e); }
-                    }
-                    pageDataCache[url].title = releaseTitle;
-                    pageDataCache[url].artist = releaseArtist;
-                    pageDataCache[url].keywords = Array.isArray(tempKeywords) ? tempKeywords.filter(kw => typeof kw === 'string') : [];
-
-                    let classification = 'paid';
-                    const nypMatch = htmlText.match(/<h4[^>]*class="ft compound-button main-button"[^>]*>[\s\S]*?<span[^>]*class="buyItemExtra buyItemNyp secondaryText"[^>]*>([\s\S]*?)<\/span>/i);
-                    if (nypMatch && nypMatch[1]) {
-                        const txt = nypMatch[1].trim().toLowerCase();
-                        if (txt === 'name your price' || txt === 'free download' || txt === '値段を決めて下さい' || txt === '無料ダウンロード') {
-                            classification = 'nyp';
-                        }
-                    } else {
-                        const freeButtonMatch = htmlText.match(/<button[^>]*class="download-link buy-link"[^>]*>([\s\S]*?)<\/button>/i);
-                        if (freeButtonMatch && freeButtonMatch[1]) {
-                            const buttonTxt = freeButtonMatch[1].trim().toLowerCase();
-                            if (buttonTxt === 'free download' || buttonTxt === '無料ダウンロード') {
-                               classification = 'free';
-                            }
-                        }
-                    }
-                    pageDataCache[url].classification = classification;
-                } catch(e) { /* Error handling */ }
+                    pageDataCache[url] = await extractPageData(htmlText, artistNameForFile);
+                } catch(e) { }
             }
         });
         await Promise.all(batchPromises);
@@ -2112,7 +2012,7 @@ browser.runtime.onInstalled.addListener(async (details) => {
     }
     const currentSaveCacheSettings = await browser.storage.local.get("saveCacheToJson");
     if (typeof currentSaveCacheSettings.saveCacheToJson === 'undefined') {
-        await browser.storage.local.set({ saveCacheToJson: false });
+        await browser.storage.local.set({ saveCacheToJson: true });
         console.log("INFO: background.js: Default JSON cache setting (disabled: false) applied.");
     }
   } catch (e) {
@@ -2267,7 +2167,6 @@ browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
             case "copyArchiveTableFiles":
                 await copyArchiveTableFiles();
                 break;
-            // --- NEW ACTION ---
             case "forceSaveJson":
                 await forceSaveCacheToJSON();
                 break;

@@ -35,15 +35,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- View Switching Logic ---
     function showMainMenu() {
-        mainMenu.classList.remove('hidden-section');
-        optionsMenu.classList.add('hidden-section');
-        document.getElementById('toggleOptionsBtn').textContent = '⚙️';
+        mainMenu.classList.remove('hidden');
+        optionsMenu.classList.add('hidden');
     }
 
     document.getElementById('toggleOptionsBtn').addEventListener('click', function() {
         loadSettings();
-        mainMenu.classList.add('hidden-section');
-        optionsMenu.classList.remove('hidden-section');
+        mainMenu.classList.add('hidden');
+        optionsMenu.classList.remove('hidden');
     });
 
     document.getElementById('backToMainMenuFromOptionsBtn').addEventListener('click', showMainMenu);

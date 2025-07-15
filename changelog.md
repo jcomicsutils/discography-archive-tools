@@ -1,5 +1,20 @@
 # Changelog
 
+### 2025-07-15
+#### Added
+ - **Richer JSON Cache Data**: The JSON cache now includes much more detail for each release:
+    - `datePublished`: The release date from the page's metadata.
+    - `about`: The full text from the "About" section.
+    - `credits`: The full text from the "Credits" section.
+    - `license`: The licensing information (e.g., "all rights reserved").
+    - `coverUrl_0`: A direct link to the high-resolution `_0` version of the cover art.
+    - `trackinfo`: Contains the `title`, `duration`, and `lyrics` (if available) for every track.
+#### Changed
+ - **Centralized Data Scraping**: Refactored the code to use a single, efficient helper function for extracting all data from a release page, reducing redundancy and improving maintainability.
+#### Fixed
+ - Settings popup not working properly.
+
+---
 ### 2025-07-12
 #### Added
 * **Discography Titles Panel**: On the "Import JSON" page, a new panel has been added that automatically generates a list of discography category names (e.g., `Artist Discography`, `(Streaming) Artist Discography`, etc.) if the imported cache file contains a top-level artist name.
