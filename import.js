@@ -105,6 +105,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 return a.item_id - b.item_id;
             }
 
+            if (currentSort === 'datePublished') {
+                const dateA = a.datePublished ? new Date(a.datePublished) : new Date(0);
+                const dateB = b.datePublished ? new Date(b.datePublished) : new Date(0);
+                return dateB - dateA; // Sort descending (newest first)
+            }
+
             return 0;
         });
 

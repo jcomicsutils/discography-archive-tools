@@ -2,6 +2,7 @@
 
 ### 2025-07-15
 #### Added
+ - **Sort by Date Published**: On the "Import JSON" page, you can now sort releases by their `datePublished`.
  - **Richer JSON Cache Data**: The JSON cache now includes much more detail for each release:
     - `datePublished`: The release date from the page's metadata.
     - `about`: The full text from the "About" section.
