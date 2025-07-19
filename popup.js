@@ -1,4 +1,3 @@
-// popup.js
 document.addEventListener('DOMContentLoaded', function () {
     // --- Page Context Setup ---
     browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
@@ -77,6 +76,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Settings Logic ---
     const emailInput = document.getElementById('emailInput');
     const zipcodeInput = document.getElementById('zipcodeInput');
+    const batchSizeInput = document.getElementById('batchSizeInput');
+    const pauseTimeInput = document.getElementById('pauseTimeInput');
     const notificationsEnabledInput = document.getElementById('notificationsEnabledInput');
     const saFormatEnabledInput = document.getElementById('saFormatEnabledInput');
     const disableHtmlEscapingInput = document.getElementById('disableHtmlEscapingInput');
@@ -85,10 +86,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const statusMessage = document.getElementById('statusMessage');
 
     function loadSettings() {
-        const defaults = { email: '', zipcode: '', notificationsEnabled: true, saFormatEnabled: false, disableHtmlEscaping: false, saveCacheToJson: true };
+        const defaults = { email: '', zipcode: '', batchSize: 10, pauseTime: 5, notificationsEnabled: true, saFormatEnabled: false, disableHtmlEscaping: false, saveCacheToJson: true };
         browser.storage.local.get(defaults).then(settings => {
             emailInput.value = settings.email;
             zipcodeInput.value = settings.zipcode;
+            batchSizeInput.value = settings.batchSize;
+            pauseTimeInput.value = settings.pauseTime;
             notificationsEnabledInput.checked = settings.notificationsEnabled;
             saFormatEnabledInput.checked = settings.saFormatEnabled;
             disableHtmlEscapingInput.checked = settings.disableHtmlEscaping;
@@ -100,6 +103,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const settingsToSave = {
             email: emailInput.value.trim(),
             zipcode: zipcodeInput.value.trim(),
+            batchSize: parseInt(batchSizeInput.value, 10) || 10,
+            pauseTime: parseInt(pauseTimeInput.value, 10) || 5,
             notificationsEnabled: notificationsEnabledInput.checked,
             saFormatEnabled: saFormatEnabledInput.checked,
             disableHtmlEscaping: disableHtmlEscapingInput.checked,

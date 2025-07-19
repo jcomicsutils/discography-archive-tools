@@ -1,6 +1,8 @@
 # Changelog
 
 ### 2025-07-18
+#### Added
+ - **Batch Size and Pause Time controls**: Added inputs in the settings panel to control the batch size and pause time.
 #### Changed
  - **Discography Titles Panel**: On the "Import JSON" page, the "Discography Titles" panel has been updated. Instead of a single text area, it now displays each title as a separate entry with its own dedicated "Copy" button for easier one-click copying.
 

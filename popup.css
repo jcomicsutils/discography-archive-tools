@@ -4,12 +4,13 @@ body {
     background-color: #282c34; 
     color: #abb2bf; 
     min-width: 280px;
+    overflow-y: hidden; /* Prevent vertical scrollbar */
 }
 
 .popup-container {
     position: relative; 
-    padding: 15px;
-    padding-bottom: 45px;
+    padding: 10px; /* Reduced padding */
+    padding-bottom: 40px; /* Reduced bottom padding */
 }
 
 #jsonIconContainer {
@@ -91,7 +92,7 @@ ul#popup-menu button:hover, #optionsSection button#saveSettingsBtn:hover {
 #optionsSection h3 {
     color: #61afef; 
     margin-top: 0;
-    margin-bottom: 15px;
+    margin-bottom: 10px; /* Reduced margin */
     text-align: center;
     font-size: 16px;
     border-bottom: 1px solid #4a4f5b;
@@ -109,19 +110,22 @@ ul#popup-menu button:hover, #optionsSection button#saveSettingsBtn:hover {
 }
 
 /* Option Items */
-.option-item { margin-bottom: 12px; }
+.option-item { margin-bottom: 10px; } /* Reduced margin */
 .option-item label { display: block; margin-bottom: 5px; font-size: 13px; }
+/* Applied style to number inputs */
 .option-item input[type="email"],
-.option-item input[type="text"] {
-    width: calc(100% - 22px); 
+.option-item input[type="text"],
+.option-item input[type="number"] {
+    width: 100%; /* Changed to 100% for better alignment */
     padding: 8px 10px;
     background-color: #21252b; 
     border: 1px solid #4a4f5b;
     border-radius: 4px;
     color: #e0e0e0;
+    box-sizing: border-box; /* Added for consistent sizing */
 }
 
-#saveSettingsBtn { margin-top: 15px; background-color: #61afef; color: #282c34; font-weight: bold; }
+#saveSettingsBtn { margin-top: 10px; background-color: #61afef; color: #282c34; font-weight: bold; } /* Reduced margin */
 
 #statusMessage { margin-top: 10px; text-align: center; font-size: 12px; min-height: 15px; }
 #statusMessage.success { color: #98c379; }

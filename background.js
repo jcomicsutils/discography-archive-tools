@@ -688,7 +688,9 @@ async function copyAllKeywordsToClipboard() {
 
         await showPageNotification(notificationTabId, `Found ${albumUrls.length} releases. Fetching data in batches...`, "success", 3000);
         
-        const BATCH_SIZE = 10;
+        const settings = await browser.storage.local.get({ batchSize: 10, pauseTime: 5 });
+        const BATCH_SIZE = settings.batchSize;
+        const PAUSE_TIME = settings.pauseTime * 1000;
         let allKeywordsCollected = [];
         let pagesScanned = 0;
 
@@ -720,8 +722,8 @@ async function copyAllKeywordsToClipboard() {
                 await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${albumUrls.length} releases...`, "success", 2000);
             }
             if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
-                await showPageNotification(notificationTabId, `(${pagesScanned}/${albumUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
-                await new Promise(r => setTimeout(r, 5000));
+                await showPageNotification(notificationTabId, `(${pagesScanned}/${albumUrls.length}) Pausing for ${settings.pauseTime}s to avoid errors...`, "success", PAUSE_TIME - 200);
+                await new Promise(r => setTimeout(r, PAUSE_TIME));
             }
         }
         
@@ -830,10 +832,10 @@ async function copyTitlesAndUrls(requestedType) {
 
     let settings;
     try {
-        settings = await browser.storage.local.get({ disableHtmlEscaping: false, saveCacheToJson: true });
+        settings = await browser.storage.local.get({ disableHtmlEscaping: false, saveCacheToJson: true, batchSize: 10, pauseTime: 5 });
     } catch (e) {
         console.error("ERROR: copyTitlesAndUrls: Could not retrieve settings.", e);
-        settings = { disableHtmlEscaping: false, saveCacheToJson: true };
+        settings = { disableHtmlEscaping: false, saveCacheToJson: true, batchSize: 10, pauseTime: 5 };
     }
     const skipHtmlEscaping = settings.disableHtmlEscaping;
 
@@ -890,7 +892,8 @@ async function copyTitlesAndUrls(requestedType) {
 
         await showPageNotification(notificationTabId, `Found ${releaseUrls.length} releases. Fetching data...`, "success", 3000);
         
-        const BATCH_SIZE = 10;
+        const BATCH_SIZE = settings.batchSize;
+        const PAUSE_TIME = settings.pauseTime * 1000;
         let outputLines = [];
         let pagesScanned = 0;
 
@@ -934,8 +937,8 @@ async function copyTitlesAndUrls(requestedType) {
                 await showPageNotification(notificationTabId, `Processed ${pagesScanned}/${releaseUrls.length} releases...`, "success", 2000);
             }
             if (releaseUrls.length > 100 && (i + BATCH_SIZE < releaseUrls.length)) {
-                await showPageNotification(notificationTabId, `(${pagesScanned}/${releaseUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
-                await new Promise(r => setTimeout(r, 5000));
+                await showPageNotification(notificationTabId, `(${pagesScanned}/${releaseUrls.length}) Pausing for ${settings.pauseTime}s to avoid errors...`, "success", PAUSE_TIME - 200);
+                await new Promise(r => setTimeout(r, PAUSE_TIME));
             }
         }
         
@@ -1257,7 +1260,9 @@ async function downloadAllAlbumCovers() {
     await showPageNotification(activeTab.id, `Found ${releaseUrls.length} releases. Fetching covers and data...`, "success", 3000);
     
     let downloadsInitiated = 0;
-    const BATCH_SIZE = 10;
+    const settings = await browser.storage.local.get({ batchSize: 10, pauseTime: 5 });
+    const BATCH_SIZE = settings.batchSize;
+    const PAUSE_TIME = settings.pauseTime * 1000;
 
     for (let i = 0; i < releaseUrls.length; i += BATCH_SIZE) {
         const batchUrls = releaseUrls.slice(i, i + BATCH_SIZE);
@@ -1315,8 +1320,8 @@ async function downloadAllAlbumCovers() {
         await showPageNotification(activeTab.id, `Processed ${i + batchUrls.length}/${releaseUrls.length}...`, "success", 2000);
 
         if (releaseUrls.length > 100 && (i + BATCH_SIZE < releaseUrls.length)) {
-            await showPageNotification(activeTab.id, `(${i + batchUrls.length}/${releaseUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
-            await new Promise(r => setTimeout(r, 5000));
+            await showPageNotification(activeTab.id, `(${i + batchUrls.length}/${releaseUrls.length}) Pausing for ${settings.pauseTime}s to avoid errors...`, "success", PAUSE_TIME - 200);
+            await new Promise(r => setTimeout(r, PAUSE_TIME));
         }
     }
     
@@ -1965,7 +1970,9 @@ async function forceSaveCacheToJSON() {
 
     await showPageNotification(activeTab.id, `Found ${albumUrls.length} releases. Fetching data...`, "success", 3000);
     
-    const BATCH_SIZE = 10;
+    const settings = await browser.storage.local.get({ batchSize: 10, pauseTime: 5 });
+    const BATCH_SIZE = settings.batchSize;
+    const PAUSE_TIME = settings.pauseTime * 1000;
     for (let i = 0; i < albumUrls.length; i += BATCH_SIZE) {
         const batchUrls = albumUrls.slice(i, i + BATCH_SIZE);
         
@@ -1986,8 +1993,8 @@ async function forceSaveCacheToJSON() {
         }
         
         if (albumUrls.length > 100 && (i + BATCH_SIZE < albumUrls.length)) {
-            await showPageNotification(activeTab.id, `(${i + BATCH_SIZE}/${albumUrls.length}) Pausing for 5s to avoid errors...`, "success", 4800);
-            await new Promise(r => setTimeout(r, 5000));
+            await showPageNotification(activeTab.id, `(${i + BATCH_SIZE}/${albumUrls.length}) Pausing for ${settings.pauseTime}s to avoid errors...`, "success", PAUSE_TIME - 200);
+            await new Promise(r => setTimeout(r, PAUSE_TIME));
         }
     }
 
@@ -2000,7 +2007,7 @@ browser.runtime.onInstalled.addListener(async (details) => {
   console.log("INFO: background.js: onInstalled listener triggered. Attempting to create context menus and set default settings.");
 
   try {
-    const currentSettings = await browser.storage.local.get("notificationsEnabled");
+    const currentSettings = await browser.storage.local.get(["notificationsEnabled", "batchSize", "pauseTime"]);
     if (typeof currentSettings.notificationsEnabled === 'undefined') {
       await browser.storage.local.set({ notificationsEnabled: true });
       console.log("INFO: background.js: Default notification setting (enabled: true) applied.");
@@ -2015,8 +2022,16 @@ browser.runtime.onInstalled.addListener(async (details) => {
         await browser.storage.local.set({ saveCacheToJson: true });
         console.log("INFO: background.js: Default JSON cache setting (disabled: false) applied.");
     }
+    if (typeof currentSettings.batchSize === 'undefined') {
+        await browser.storage.local.set({ batchSize: 10 });
+        console.log("INFO: background.js: Default batch size setting (10) applied.");
+    }
+    if (typeof currentSettings.pauseTime === 'undefined') {
+        await browser.storage.local.set({ pauseTime: 5 });
+        console.log("INFO: background.js: Default pause time setting (5s) applied.");
+    }
   } catch (e) {
-    console.error("ERROR: background.js: Failed to set default notification setting:", e);
+    console.error("ERROR: background.js: Failed to set default settings:", e);
   }
 
   try {
