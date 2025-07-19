@@ -5,10 +5,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const formatHtmlCheckbox = document.getElementById('format-html');
     const addItemIdCheckbox = document.getElementById('add-item-id');
     const sortSelect = document.getElementById('sort-select');
-    let cachedData = [];
-    let topLevelArtist = null; // Variable to store the top-level artist name
+    const artistSelectorContainer = document.getElementById('artist-selector-container');
+    const artistSelect = document.getElementById('artist-select');
+
+    let allReleases = [];
+    let uniqueArtists = new Set();
     let currentSort = 'artist';
 
+    // --- Event Listeners ---
     dropZone.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -18,120 +22,151 @@ document.addEventListener('DOMContentLoaded', function () {
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.classList.remove('drag-over');
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFile(files[0]);
-        }
+        handleFiles(e.dataTransfer.files);
     });
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFile(e.target.files[0]);
-        }
-    });
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
-    formatHtmlCheckbox.addEventListener('change', updateOutput);
-    addItemIdCheckbox.addEventListener('change', updateOutput);
+    // --- Control Listeners ---
+    formatHtmlCheckbox.addEventListener('change', updateOutputPanels);
+    addItemIdCheckbox.addEventListener('change', updateOutputPanels);
     sortSelect.addEventListener('change', function() {
         currentSort = this.value;
-        updateOutput();
+        updateOutputPanels();
     });
+    artistSelect.addEventListener('change', () => updateDiscographyTitles(artistSelect.value));
 
-    function handleFile(file) {
-        if (file && file.type === 'application/json') {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                try {
-                    topLevelArtist = null; // Reset on each new file import
-                    const parsedJson = JSON.parse(event.target.result);
-                    
-                    // Check for new format (object with artist key) vs old format (array)
-                    if (Array.isArray(parsedJson)) {
-                        cachedData = parsedJson; // Old format
-                    } else if (typeof parsedJson === 'object' && parsedJson !== null && Object.keys(parsedJson).length > 0) {
-                        // New format: get the artist name (the key) and the release list (the value)
-                        topLevelArtist = Object.keys(parsedJson)[0]; 
-                        cachedData = Object.values(parsedJson)[0];
-                        if (!Array.isArray(cachedData)) {
-                             throw new Error("JSON object value is not an array.");
-                        }
-                    } else {
-                        cachedData = []; // Handle empty or unrecognized JSON
-                    }
-                    updateOutput();
-                    resultsContainer.classList.remove('hidden-section');
-                } catch (err) {
-                    alert('Error: Invalid JSON file. ' + err.message);
-                    console.error("Import error:", err);
-                }
-            };
-            reader.readAsText(file);
-        } else {
-            alert('Please select a valid JSON file.');
+    function handleFiles(files) {
+        if (!files || files.length === 0) return;
+
+        // Reset state for new file batch
+        allReleases = [];
+        uniqueArtists = new Set();
+        artistSelect.innerHTML = '';
+        artistSelectorContainer.classList.add('hidden');
+
+        const jsonFiles = Array.from(files).filter(file => file && file.type === 'application/json');
+        const processedFileCount = jsonFiles.length;
+
+        if (processedFileCount === 0) {
+            alert('No JSON files were selected.');
+            return;
         }
+
+        const fileReadPromises = jsonFiles.map(file => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const parsedJson = JSON.parse(event.target.result);
+                        let artistName, releaseList;
+
+                        if (Array.isArray(parsedJson)) {
+                            artistName = 'Unknown Artist';
+                            releaseList = parsedJson;
+                        } else if (typeof parsedJson === 'object' && parsedJson !== null && Object.keys(parsedJson).length > 0) {
+                            artistName = Object.keys(parsedJson)[0].trim(); // Trim whitespace
+                            releaseList = Object.values(parsedJson)[0];
+                            if (!Array.isArray(releaseList)) {
+                                throw new Error(`In ${file.name}, the JSON object's value is not a release list.`);
+                            }
+                        } else {
+                            return resolve(); // Skip empty or invalid JSON structures
+                        }
+
+                        uniqueArtists.add(artistName);
+                        allReleases.push(...releaseList);
+                        resolve();
+                    } catch (err) {
+                        reject(`Error parsing ${file.name}: ${err.message}`);
+                    }
+                };
+                reader.onerror = () => reject(`Error reading ${file.name}`);
+                reader.readAsText(file);
+            });
+        });
+
+        Promise.all(fileReadPromises)
+            .then(() => {
+                if (allReleases.length === 0) {
+                    alert('No valid release data found in the selected files.');
+                    resultsContainer.classList.add('hidden'); // Hide results if no data
+                    return;
+                }
+
+                // Handle artist selection logic
+                const artists = Array.from(uniqueArtists);
+                if (processedFileCount > 1 && artists.length > 1) {
+                    artists.forEach(artist => {
+                        const option = document.createElement('option');
+                        option.value = artist;
+                        option.textContent = artist;
+                        artistSelect.appendChild(option);
+                    });
+                    artistSelectorContainer.classList.remove('hidden');
+                    updateDiscographyTitles(artists[0]);
+                } else if (artists.length >= 1) {
+                    updateDiscographyTitles(artists[0]);
+                } else {
+                    updateDiscographyTitles(null); // No artists found
+                }
+
+                // Update all output panels with combined data
+                updateOutputPanels();
+                resultsContainer.classList.remove('hidden');
+            })
+            .catch(error => {
+                alert('An error occurred while processing files:\n' + error);
+                console.error("Import error:", error);
+            });
     }
 
-    function updateOutput() {
-        const discographyTitlesOutput = document.getElementById('discography-titles-output');
-        discographyTitlesOutput.innerHTML = ''; // Clear previous entries
+    function updateDiscographyTitles(artistName) {
+        const outputDiv = document.getElementById('discography-titles-output');
+        outputDiv.innerHTML = '';
 
-        if (topLevelArtist) {
-            const titles = [
-                `${topLevelArtist} Streaming Discography`,
-                `${topLevelArtist} Discography`,
-                `(Streaming) ${topLevelArtist} Discography`,
-                `(Streaming) (Netlabel) ${topLevelArtist} Discography`,
-                `(Streaming) (Label) ${topLevelArtist} Discography`,
-                `(Netlabel) ${topLevelArtist} Discography`,
-                `(Label) ${topLevelArtist} Discography`
-            ];
-            titles.forEach(title => {
-                const entryDiv = document.createElement('div');
-                entryDiv.className = 'discography-title-entry';
-
-                const titleSpan = document.createElement('span');
-                titleSpan.textContent = title;
-                entryDiv.appendChild(titleSpan);
-
-                const copyBtn = document.createElement('button');
-                copyBtn.className = 'copy-btn-small';
-                copyBtn.textContent = 'Copy';
-                copyBtn.addEventListener('click', function() {
-                    navigator.clipboard.writeText(title).then(() => {
-                        copyBtn.textContent = 'Copied!';
-                        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
-                    });
-                });
-                entryDiv.appendChild(copyBtn);
-
-                discographyTitlesOutput.appendChild(entryDiv);
-            });
-        } else {
-            discographyTitlesOutput.innerHTML = '<span>artist not found</span>';
+        if (!artistName || artistName === 'Unknown Artist') {
+            outputDiv.innerHTML = '<span>Select an artist to see discography titles.</span>';
+            return;
         }
 
-        cachedData.sort((a, b) => {
+        const titles = [
+            `${artistName} Streaming Discography`, `${artistName} Discography`,
+            `(Streaming) ${artistName} Discography`, `(Streaming) (Netlabel) ${artistName} Discography`,
+            `(Streaming) (Label) ${artistName} Discography`, `(Netlabel) ${artistName} Discography`,
+            `(Label) ${artistName} Discography`
+        ];
+
+        titles.forEach(title => {
+            const entryDiv = document.createElement('div');
+            entryDiv.className = 'discography-title-entry';
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = title;
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'copy-btn-small';
+            copyBtn.textContent = 'Copy';
+            copyBtn.onclick = () => {
+                navigator.clipboard.writeText(title).then(() => {
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+                });
+            };
+            entryDiv.append(titleSpan, copyBtn);
+            outputDiv.appendChild(entryDiv);
+        });
+    }
+
+    function updateOutputPanels() {
+        // Sort the combined list of all releases
+        allReleases.sort((a, b) => {
             if (currentSort === 'artist') {
-                const artistCompare = a.artist.localeCompare(b.artist, undefined, { sensitivity: 'base' });
-                if (artistCompare !== 0) {
-                    return artistCompare;
-                }
-                return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+                const artistA = a.artist || ''; const artistB = b.artist || '';
+                const artistCompare = artistA.localeCompare(artistB, undefined, { sensitivity: 'base' });
+                if (artistCompare !== 0) return artistCompare;
+                return (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
             }
-
-            if (currentSort === 'title') {
-                return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
-            }
-
-            if (currentSort === 'item_id') {
-                return a.item_id - b.item_id;
-            }
-
-            if (currentSort === 'datePublished') {
-                const dateA = a.datePublished ? new Date(a.datePublished) : new Date(0);
-                const dateB = b.datePublished ? new Date(b.datePublished) : new Date(0);
-                return dateB - dateA; // Sort descending (newest first)
-            }
-
+            if (currentSort === 'title') return (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+            if (currentSort === 'item_id') return (Number(a.item_id) || 0) - (Number(b.item_id) || 0);
+            if (currentSort === 'datePublished') return (new Date(b.datePublished || 0)) - (new Date(a.datePublished || 0));
             return 0;
         });
 
@@ -140,31 +175,17 @@ document.addEventListener('DOMContentLoaded', function () {
         const nypOutput = [];
         const paidOutput = [];
         const allOutput = [];
-        const allTags = new Set();
+        const allTags = new Set(Array.from(uniqueArtists).filter(a => a !== 'Unknown Artist').map(a => a.toLowerCase()));
 
-        if (topLevelArtist) {
-            allTags.add(topLevelArtist.toLowerCase());
-        }
-
-        cachedData.forEach(item => {
+        allReleases.forEach(item => {
+            if (!item || !item.artist || !item.title || !item.url) return;
             const itemIdSuffix = (addItemId && item.item_id) ? ` [${item.item_id}]` : '';
-
-            let entry;
-            if (isHtml) {
-                const title = `${item.artist} - ${item.title}${itemIdSuffix}`;
-                entry = `<a href="${item.url}">${title}</a><br>\n`;
-            } else {
-                const title = `${item.title}${itemIdSuffix} | ${item.artist}`;
-                entry = `${title}\n${item.url}`;
-            }
+            const entry = isHtml
+                ? `<a href="${item.url}">${item.artist} - ${item.title}${itemIdSuffix}</a><br>\n`
+                : `${item.title}${itemIdSuffix} | ${item.artist}\n${item.url}`;
 
             allOutput.push(entry);
-
-            if (item.classification === 'nyp' || item.classification === 'free') {
-                nypOutput.push(entry);
-            } else {
-                paidOutput.push(entry);
-            }
+            (item.classification === 'nyp' || item.classification === 'free') ? nypOutput.push(entry) : paidOutput.push(entry);
             if (item.tags && Array.isArray(item.tags)) {
                 item.tags.forEach(tag => allTags.add(tag.toLowerCase()));
             }
@@ -176,10 +197,10 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('all-output').value = allOutput.join(joiner);
         document.getElementById('tags-output').value = Array.from(allTags).join('; ');
     }
-    
+
     document.querySelectorAll('.copy-btn').forEach(button => {
         button.addEventListener('click', function() {
-            const targetId = this.getAttribute('data-target');
+            const targetId = this.dataset.target;
             const content = document.getElementById(targetId).value;
             navigator.clipboard.writeText(content).then(() => {
                 this.textContent = 'Copied!';

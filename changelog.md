@@ -1,5 +1,11 @@
 # Changelog
 
+### 2025-07-19
+#### Added
+ - **Multi-File JSON Import**: The "Import JSON" page now supports uploading multiple cache files at once.
+ - **Artist Selection on Import**: If uploaded files contain different top-level artists, a dropdown menu now appears, allowing the user to select an artist for generating discography titles.
+
+---
 ### 2025-07-18
 #### Added
  - **Batch Size and Pause Time controls**: Added inputs in the settings panel to control the batch size and pause time.

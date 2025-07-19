@@ -9,13 +9,19 @@
     <div class="import-container">
         <header class="import-header">
             <h1>Import JSON Cache</h1>
-            <p>Drag and drop your `datools-cache` file below</p>
+            <p>Drag and drop your `datools-cache` file(s) below</p>
         </header>
 
         <div id="drop-zone">
-            <p>Drag & drop a JSON file here or click to select</p>
-            <input type="file" id="fileInput" accept=".json" style="display: none;">
+            <p>Drag & drop JSON file(s) here or click to select</p>
+            <input type="file" id="fileInput" accept=".json" style="display: none;" multiple>
         </div>
+
+        <div id="artist-selector-container" class="hidden" style="margin-top: 20px;">
+             <label for="artist-select" class="control-label">Multiple artists found. Select one:</label>
+             <select id="artist-select" class="styled-select"></select>
+        </div>
+
 
         <div id="controls-container">
             <div class="control-group">
@@ -35,7 +41,7 @@
             </div>
         </div>
 
-        <div id="results-container" class="hidden-section">
+        <div id="results-container" class="hidden">
             <div class="result-panel">
                 <div class="panel-header">
                     <h4>NYP/Free Titles & URLs</h4>
