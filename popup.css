@@ -338,3 +338,40 @@ textarea {
     resize: vertical;
     font-family: 'Courier New', Courier, monospace;
 }
+
+/* NEW STYLES FOR DISCOGRAPHY TITLES */
+#discography-titles-output {
+    background-color: #1e1e2f;
+    border: 1px solid #413a63;
+    border-radius: 5px;
+    padding: 8px;
+    min-height: 100px;
+}
+
+.discography-title-entry {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 4px;
+    border-bottom: 1px solid #2b2844;
+}
+
+.discography-title-entry:last-child {
+    border-bottom: none;
+}
+
+.copy-btn-small {
+    padding: 4px 8px;
+    font-size: 0.8em;
+    background-color: #413a63;
+    border: none;
+    border-radius: 4px;
+    color: #c792ea;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.copy-btn-small:hover {
+    background-color: #5d548b;
+}

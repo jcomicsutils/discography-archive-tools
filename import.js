@@ -72,6 +72,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function updateOutput() {
         const discographyTitlesOutput = document.getElementById('discography-titles-output');
+        discographyTitlesOutput.innerHTML = ''; // Clear previous entries
 
         if (topLevelArtist) {
             const titles = [
@@ -83,9 +84,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 `(Netlabel) ${topLevelArtist} Discography`,
                 `(Label) ${topLevelArtist} Discography`
             ];
-            discographyTitlesOutput.value = titles.join('\n');
+            titles.forEach(title => {
+                const entryDiv = document.createElement('div');
+                entryDiv.className = 'discography-title-entry';
+
+                const titleSpan = document.createElement('span');
+                titleSpan.textContent = title;
+                entryDiv.appendChild(titleSpan);
+
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-btn-small';
+                copyBtn.textContent = 'Copy';
+                copyBtn.addEventListener('click', function() {
+                    navigator.clipboard.writeText(title).then(() => {
+                        copyBtn.textContent = 'Copied!';
+                        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+                    });
+                });
+                entryDiv.appendChild(copyBtn);
+
+                discographyTitlesOutput.appendChild(entryDiv);
+            });
         } else {
-            discographyTitlesOutput.value = "artist not found";
+            discographyTitlesOutput.innerHTML = '<span>artist not found</span>';
         }
 
         cachedData.sort((a, b) => {

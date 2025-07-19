@@ -1,5 +1,10 @@
 # Changelog
 
+### 2025-07-18
+#### Changed
+ - **Discography Titles Panel**: On the "Import JSON" page, the "Discography Titles" panel has been updated. Instead of a single text area, it now displays each title as a separate entry with its own dedicated "Copy" button for easier one-click copying.
+
+---
 ### 2025-07-15
 #### Added
  - **Sort by Date Published**: On the "Import JSON" page, you can now sort releases by their `datePublished`.
