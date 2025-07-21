@@ -1,5 +1,10 @@
 # Changelog
 
+### 2025-07-21
+#### Changed
+ - **Shift to Python for JSON Caching**: The primary method for generating detailed JSON caches has been moved from the browser extension to the new standalone `bandcamp-archiver.py` script.
+
+---
 ### 2025-07-19
 #### Added
  - **Multi-File JSON Import**: The "Import JSON" page now supports uploading multiple cache files at once.
