@@ -239,12 +239,6 @@ class Bandcamp:
 
 
     def parse(self, url: str, fetch_track_art: bool = False, debugging: bool = False) -> Union[dict, None]:
-        """
-        Requests the page, cherry-picks album info, and returns it as a dictionary.
-        :param url: album/track url
-        :param fetch_track_art: If True, fetches individual pages for each track to get unique art.
-        :return: album metadata dictionary
-        """
         try:
             response = self._session_get(url, headers=self.headers)
         except requests.exceptions.RequestException as e:
@@ -270,7 +264,10 @@ class Bandcamp:
 
         if not page_json.get('trackinfo'):
             self.logger.error(f"Could not find track info JSON on {url}. It might not be a track/album page.")
-            return None
+            # Still attempt to build a partial object if it's a valid page but just has no tracks
+            # This allows logging it as an empty trackinfo album later.
+            page_json['trackinfo'] = []
+
 
         self.logger.debug(" Generating Album..")
         self.tracks = page_json['trackinfo']
@@ -349,10 +346,20 @@ class Bandcamp:
                 return 'free'
                 
             # Fallback to JSON data if HTML checks fail
+            is_free_download = False
+            if page_json.get('trackinfo'):
+                # Check if any track is marked as part of a free album download
+                for track in page_json['trackinfo']:
+                    if track.get('free_album_download'):
+                        is_free_download = True
+                        break
+            
+            if is_free_download:
+                return 'free'
+
+            # If not free, check for Name Your Price (nyp)
             if page_json.get('current', {}).get('minimum_price') == 0:
                 return 'nyp'
-            if page_json.get('freeDownload', False):
-                return 'free'
 
         except Exception as e:
             self.logger.warning(f"Could not determine classification: {e}")
@@ -655,6 +662,19 @@ def save_url_list(urls: List[str], filename: str):
     except IOError as e:
         print(f"--- Error: Could not save URL list to {filename}. Reason: {e} ---")
 
+def save_removed_log(log_entries: List[str], filename: str):
+    """Saves a list of log entries for removed URLs to a text file."""
+    if not log_entries:
+        return
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            # Join entries with a blank line between them
+            content = '\n\n'.join(log_entries)
+            f.write(content + '\n')
+        print(f"--- Logged removed URLs to {filename} ---")
+    except IOError as e:
+        print(f"--- Error: Could not save removed log to {filename}. Reason: {e} ---")
+
 def is_artist_page(url: str) -> bool:
     """Check if a URL is a main artist page (not a specific album or track)."""
     parsed_url = urlparse(url)
@@ -733,15 +753,30 @@ def download_artist_images(page_url: str, soup: bs4.BeautifulSoup, artist_folder
         download_image(hq_banner_url, artist_folder_path, f"Custom Header_orig ({index})", bandcamp_parser)
 
     # 3. Download Background
+    bg_img_url = None
+    # Method 1: Check for inline style on body tag (original method)
     body_tag = soup.find('body')
     if body_tag and body_tag.get('style'):
         style = body_tag['style']
         match = re.search(r'background-image:\s*url\((.*?)\)', style)
         if match:
             bg_img_url = match.group(1).strip('\'"')
-            bg_img_url = urljoin(page_url, bg_img_url)
-            print(f"  -> Found artist background image: {bg_img_url}")
-            download_image(bg_img_url, artist_folder_path, f"Background Image ({index})", bandcamp_parser)
+
+    # Method 2: Fallback to <style id="custom-design-rules-style"> tag
+    if not bg_img_url:
+        style_tag = soup.find('style', id='custom-design-rules-style')
+        if style_tag and style_tag.string:
+            # Use a more specific regex to find the background-image inside the body selector
+            match = re.search(r'body\s*\{[^}]*?background-image:\s*url\(([^)]+)\)', style_tag.string, re.DOTALL)
+            if match:
+                bg_img_url = match.group(1).strip('\'"')
+
+    if bg_img_url:
+        # Make the URL absolute if it's relative
+        bg_img_url = urljoin(page_url, bg_img_url)
+        hq_bg_url = get_high_res_url(bg_img_url) or bg_img_url
+        print(f"  -> Found artist background image: {hq_bg_url}")
+        download_image(hq_bg_url, artist_folder_path, f"Background Image ({index})", bandcamp_parser)
 
 def process_album_covers(album_data, base_cover_folder, bandcamp_parser: Bandcamp, fetch_track_art, downloaded_covers, hash_covers):
     """
@@ -894,29 +929,55 @@ if __name__ == '__main__':
         print("No album/track URLs could be found from the provided inputs.")
         sys.exit(0)
 
-    # 2. Determine primary artist and set up directories using the first discovered URL
-    print(f"\n--- Determining primary artist from first discovered release: {unique_album_urls[0]} ---")
-    # Parse without track art first to speed up artist determination
-    first_album_data = bandcamp_parser.parse(unique_album_urls[0], fetch_track_art=False)
+    # 2. Determine primary artist from the first URL provided in the command line
+    primary_artist_name = 'Unknown_Artist'  # Default value
+    first_cli_url = args.urls[0]
+    print(f"\n--- Determining primary artist from the first provided URL: {first_cli_url} ---")
+    try:
+        response = bandcamp_parser._session_get(first_cli_url, headers=bandcamp_parser.headers)
+        # Use lxml if available, otherwise fall back to html.parser
+        try:
+            soup = bs4.BeautifulSoup(response.text, "lxml")
+        except bs4.FeatureNotFound:
+            soup = bs4.BeautifulSoup(response.text, "html.parser")
+        
+        # Look for the specific <p> -> <span> structure for the artist name
+        band_name_element = soup.select_one('p#band-name-location span.title')
+        
+        if band_name_element and band_name_element.text:
+            primary_artist_name = band_name_element.text.strip()
+            print(f"Determined primary artist from HTML: {primary_artist_name}")
+        else:
+            print("Could not find artist name in '#band-name-location' block. Falling back to parsing the page content.")
+            # If the specific HTML isn't found, fall back to the old method on the same URL
+            # Note: We use unique_album_urls[0] here as a reliable album/track page for parsing
+            fallback_url = unique_album_urls[0] if unique_album_urls else first_cli_url
+            first_album_data = bandcamp_parser.parse(fallback_url, fetch_track_art=False)
+            if first_album_data and first_album_data.get('artist'):
+                primary_artist_name = first_album_data.get('artist')
+                print(f"Determined primary artist via page parse fallback: {primary_artist_name}")
+            else:
+                 print("Fallback method also failed. Using 'Unknown_Artist'.")
 
-    if not first_album_data:
-        print(f"Fatal: Could not parse the first release URL to determine the primary artist. Exiting.")
+    except requests.exceptions.RequestException as e:
+        print(f"Fatal: Could not fetch the first URL to determine the primary artist: {e}. Exiting.")
         sys.exit(1)
+    except Exception as e:
+        print(f"An unexpected error occurred while determining the primary artist: {e}")
+        print("Using 'Unknown_Artist' as a fallback.")
+    
+    if primary_artist_name == 'Unknown_Artist':
+         print("\nWarning: Could not definitively determine a primary artist name. Files will be saved under 'Unknown_Artist'.\n")
 
-    primary_artist_name = first_album_data.get('artist', 'Unknown_Artist')
-    print(f"Determined primary artist: {primary_artist_name}")
+    print(f"Using primary artist: {primary_artist_name}")
 
     artist_folder_name = create_safe_filename(primary_artist_name)
     artist_folder_path = os.path.join(os.getcwd(), artist_folder_name)
     os.makedirs(artist_folder_path, exist_ok=True)
     print(f"Output directory: {artist_folder_path}")
 
-    # 3. Save URL list if requested
-    if args.save_list:
-        list_filename = os.path.join(artist_folder_path, "bandcamp-dump.lst")
-        save_url_list(unique_album_urls, list_filename)
 
-    # 4. Download artist images ONLY for the URLs provided in the command line
+    # 3. Download artist images ONLY for the URLs provided in the command line
     if cover_download:
         print("\n--- Checking for artist-level images from provided URLs ---")
         for i, page_url in enumerate(args.urls):
@@ -928,9 +989,11 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"    -> Could not process artist images for {page_url}. Error: {e}")
 
-    # 5. Process all discovered URLs for JSON and album covers
+    # 4. Process all discovered URLs for JSON and album covers
     all_releases_data = []
     downloaded_covers = set()
+    removed_log_entries = []
+    urls_with_empty_trackinfo = set()
     cover_folder = ""
     if cover_download:
         folder_name_base = create_safe_filename(f"{primary_artist_name} - Album Covers")
@@ -943,11 +1006,35 @@ if __name__ == '__main__':
         album_data = bandcamp_parser.parse(album_url, fetch_track_art=fetch_track_art)
         
         if album_data:
+            # If -sl is passed, check for empty trackinfo to log for removal from the dump list
+            if args.save_list and isinstance(album_data.get("trackinfo"), list) and not album_data.get("trackinfo"):
+                print(f"  -> Album has empty trackinfo. Logging for removal from URL list.")
+                urls_with_empty_trackinfo.add(album_url)
+
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                log_entry = (
+                    f"[{timestamp}] URL: {album_url}\n"
+                    f"        Reason: Empty trackinfo, assuming album has no streamable tracks."
+                )
+                removed_log_entries.append(log_entry)
+
             all_releases_data.append(album_data)
             
             if cover_download:
                 print(f"  -> Checking for album/track covers...")
                 process_album_covers(album_data, cover_folder, bandcamp_parser, fetch_track_art, downloaded_covers, hash_covers)
+
+    # 5. Save URL lists if requested (after processing all albums)
+    if args.save_list:
+        # Save the main list, excluding URLs that had empty trackinfo
+        final_dump_urls = [url for url in unique_album_urls if url not in urls_with_empty_trackinfo]
+        list_filename = os.path.join(artist_folder_path, "bandcamp-dump.lst")
+        save_url_list(final_dump_urls, list_filename)
+
+        # Save the list of removed URLs to its own log file
+        if removed_log_entries:
+            removed_filename = os.path.join(artist_folder_path, "removed.txt")
+            save_removed_log(removed_log_entries, removed_filename)
 
     # 6. Save the final consolidated JSON file
     if all_releases_data:
