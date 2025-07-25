@@ -597,8 +597,8 @@ def create_and_truncate_filename(artist, title, item_id, is_track=False, track_i
     - For albums: "{artist} - {title} [{item_id}]"
     - For tracks: "{track_num} - {track_artist} - {track_title} [{track_id}]"
     """
-    max_len = 75
-    target_len = 70
+    max_len = 100
+    target_len = 95
     ellipsis = "(...)"
 
     if is_track and track_info:
