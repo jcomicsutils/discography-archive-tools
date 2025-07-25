@@ -453,13 +453,6 @@ class Bandcamp:
             lyrics_row = self.soup.select_one(f'tr#lyrics_row_{track_num} div')
             if lyrics_row:
                 lyrics_text = self._get_text_with_linebreaks(lyrics_row)
-
-        mp3_stream_url = None
-        file_info = track.get('file')
-        if file_info and 'mp3-128' in file_info:
-            mp3_stream_url = file_info['mp3-128']
-            if mp3_stream_url.startswith('//'):
-                mp3_stream_url = "https:" + mp3_stream_url
         
         track_title = track.get('title', 'Untitled Track')
         track_artist = track.get('artist')
@@ -484,8 +477,7 @@ class Bandcamp:
             "track_id": track.get('id'),
             "track_num": str(track.get('track_num', 'N/A')),
             "artist": track_artist, 
-            "url": full_track_url,
-            "mp3url": mp3_stream_url
+            "url": full_track_url
         }
         
         if fetch_track_art:
@@ -605,8 +597,8 @@ def create_and_truncate_filename(artist, title, item_id, is_track=False, track_i
     - For albums: "{artist} - {title} [{item_id}]"
     - For tracks: "{track_num} - {track_artist} - {track_title} [{track_id}]"
     """
-    max_len = 100
-    target_len = 95
+    max_len = 75
+    target_len = 70
     ellipsis = "(...)"
 
     if is_track and track_info:
@@ -781,6 +773,7 @@ def download_artist_images(page_url: str, soup: bs4.BeautifulSoup, artist_folder
 def process_album_covers(album_data, base_cover_folder, bandcamp_parser: Bandcamp, fetch_track_art, downloaded_covers, hash_covers):
     """
     Handles the downloading of album and track covers based on user settings.
+    This version is optimized to prevent redundant network requests and consolidate identical covers.
     """
     if not album_data or not base_cover_folder:
         return
@@ -788,30 +781,19 @@ def process_album_covers(album_data, base_cover_folder, bandcamp_parser: Bandcam
     artist = album_data.get('artist', 'Unknown_Artist')
     title = album_data.get('title', 'Untitled')
     item_id = album_data.get('item_id')
+    album_art_id = album_data.get('art_id')
     album_cover_url = album_data.get("coverUrl_0", "") + ".jpg"
     tracks = album_data.get("trackinfo", [])
 
-    # Determine if we should create a subfolder for this album's art
+    # Determine if the album has unique track covers by checking the pre-fetched data
     has_unique_track_covers = False
     if fetch_track_art:
         for track in tracks:
-            # Re-parsing each track is slow but necessary to get unique art info reliably
-            track_url = track.get('url')
-            if not track_url: continue
-            try:
-                track_page_response = bandcamp_parser._session_get(track_url, headers=bandcamp_parser.headers)
-                track_soup = bs4.BeautifulSoup(track_page_response.text, "lxml")
-                track_art_id_from_page = BandcampJSON(track_soup).generate()
-                track_page_json = {}
-                for entry in track_art_id_from_page:
-                    track_page_json.update(json.loads(entry))
-                
-                if track_page_json.get('art_id') and track_page_json.get('art_id') != album_data.get('art_id'):
-                    has_unique_track_covers = True
-                    break
-            except Exception as e:
-                logging.warning(f"Could not check unique art for track '{track.get('title')}': {e}")
-    
+            # Check if the track has its own art_id and if it's different from the album's
+            if track.get('art_id') and track.get('art_id') != album_art_id:
+                has_unique_track_covers = True
+                break  # Found one, no need to check further
+
     target_folder = base_cover_folder
     if has_unique_track_covers:
         album_specific_folder_name = create_and_truncate_filename(artist, title, item_id)
@@ -824,38 +806,28 @@ def process_album_covers(album_data, base_cover_folder, bandcamp_parser: Bandcam
         album_filename_base = create_and_truncate_filename(artist, title, item_id)
         download_image(album_cover_url, target_folder, album_filename_base, bandcamp_parser)
         downloaded_covers.add(album_cover_url)
-    
-    # Download unique track covers if applicable
+
+    # Download unique track covers if applicable, using the pre-fetched art_id
     if has_unique_track_covers:
         for track in tracks:
-            track_url = track.get('url')
-            if not track_url: continue
-            
-            try:
-                # This is redundant if we already did it above, but safer to ensure we have the right soup
-                track_page_response = bandcamp_parser._session_get(track_url, headers=bandcamp_parser.headers)
-                track_soup = bs4.BeautifulSoup(track_page_response.text, "lxml")
-                
-                track_page_json_data = BandcampJSON(track_soup).generate()
-                track_page_json = {}
-                for entry in track_page_json_data:
-                    track_page_json.update(json.loads(entry))
-                
-                hq_track_art_id = track_page_json.get('art_id')
-                if hq_track_art_id:
+            hq_track_art_id = track.get('art_id')
+
+            # Only process if the track has its own art_id and it's different from the album's
+            if hq_track_art_id and hq_track_art_id != album_art_id:
+                try:
                     hq_track_art_url = f"https://f4.bcbits.com/img/a{hq_track_art_id}_0.jpg"
                     if hq_track_art_url not in downloaded_covers:
                         track_title = track.get('title', 'Untitled Track')
                         track_id = track.get('track_id')
                         track_info_for_name = {'num': track.get('track_num', 'NA'), 'artist': track.get('artist', 'Unknown_Artist')}
                         track_filename_base = create_and_truncate_filename(None, track_title, track_id, is_track=True, track_info=track_info_for_name)
+                        
                         download_image(hq_track_art_url, target_folder, track_filename_base, bandcamp_parser)
                         downloaded_covers.add(hq_track_art_url)
+                except Exception as e:
+                    logging.error(f"Failed to process unique track art for '{track.get('title')}': {e}")
 
-            except Exception as e:
-                logging.error(f"Failed to process unique track art for '{track.get('title')}': {e}")
-
-    # De-duplication logic
+    # De-duplication and consolidation logic
     if has_unique_track_covers and hash_covers:
         print(f"  -> Hashing and de-duplicating covers in: {target_folder}")
         hashes = {}
@@ -878,14 +850,34 @@ def process_album_covers(album_data, base_cover_folder, bandcamp_parser: Bandcam
             except OSError as e:
                 print(f"    -> Error deleting file {f}: {e}")
 
-        if len(hashes) <= 1:
-            print(f"  -> All track covers are identical. Consolidating.")
-            if not os.listdir(target_folder):
-                 try:
-                    os.rmdir(target_folder)
-                    print(f"    -> Removed empty directory: {target_folder}")
-                 except OSError as e:
-                    print(f"    -> Could not remove directory {target_folder}: {e}")
+        # If only one unique cover remains, it means all were identical. Consolidate it.
+        if len(hashes) == 1:
+            print(f"  -> All covers in subfolder are identical. Consolidating and cleaning up.")
+            try:
+                # Get the single remaining file
+                remaining_filepath = list(hashes.values())[0]
+                
+                # Create the proper destination name for the main album cover
+                album_filename_base = create_and_truncate_filename(artist, title, item_id)
+                extension = os.path.splitext(remaining_filepath)[1]
+                destination_path = os.path.join(base_cover_folder, album_filename_base + extension)
+
+                # If a file with the destination name already exists, just delete the redundant file
+                if os.path.exists(destination_path):
+                    os.remove(remaining_filepath)
+                # Otherwise, move and rename the file to the parent cover directory
+                else:
+                    shutil.move(remaining_filepath, destination_path)
+                
+                print(f"    -> Consolidated cover to: {os.path.basename(destination_path)}")
+
+                # Remove the now-empty subfolder
+                os.rmdir(target_folder)
+                print(f"    -> Removed empty subfolder: {os.path.basename(target_folder)}")
+
+            except (IOError, OSError, shutil.Error) as e:
+                print(f"    -> Error during consolidation: {e}")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Fetch and parse data from a Bandcamp URL.")
