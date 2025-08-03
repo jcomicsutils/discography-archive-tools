@@ -1576,79 +1576,133 @@ async function copyReleasesLinks() {
         return;
     }
 
+    const url = activeTab.url;
+    const artistsListPageRegex = /^https?:\/\/[^/.]+\.bandcamp\.com\/artists/;
     const artistPageRegex = /^https?:\/\/([^\/]+)\.bandcamp\.com\/(music\/?|[?#]|$)/;
-    const urlMatch = activeTab.url.match(artistPageRegex);
 
-    if (!urlMatch) {
-        console.log(`INFO: copyReleasesLinks: Active tab (${activeTab.url}) is not an artist page.`);
-        await showPageNotification(activeTab.id, "This feature only works on an artist's main page.", "error");
-        return;
-    }
-
-    const settings = await browser.storage.local.get({ saFormatEnabled: false });
-
-    await showPageNotification(activeTab.id, "Scanning artist page for all release links...", "success", 2000);
-
-    let releaseUrls;
-    try {
-        const results = await browser.tabs.executeScript(activeTab.id, {
-            code: `
-                (function() {
-                    const links = new Set();
-                    document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a').forEach(a => {
-                        if (a.href && (a.href.includes('/album/') || a.href.includes('/track/'))) {
-                            links.add(a.href);
-                        }
-                    });
-                    return Array.from(links);
-                })();
-            `
-        });
-        releaseUrls = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
-    } catch (e) {
-        console.error("ERROR: copyReleasesLinks: Failed to inject script to scrape release links.", e);
-        await showPageNotification(activeTab.id, "Error scanning page for releases.", "error");
-        return;
-    }
-
-    if (releaseUrls.length === 0) {
-        console.log("INFO: copyReleasesLinks: No album/track links found on the artist page.");
-        await showPageNotification(activeTab.id, "No release links found on this page.", "error");
-        return;
-    }
-
-    let outputString;
-
-    if (settings.saFormatEnabled) {
-        let artistName;
+    // Handle /artists page
+    if (artistsListPageRegex.test(url)) {
+        await showPageNotification(activeTab.id, "Scanning for artist links...", "success", 2000);
+        let artistLinks;
         try {
             const results = await browser.tabs.executeScript(activeTab.id, {
-                code: `(function() { const el = document.querySelector('.band-name, #band-name, span.title'); return el ? el.textContent.trim() : null; })();`
+                code: `
+                    (function() {
+                        const links = new Set();
+                        // Target the <a> tags directly inside the grid items for accuracy
+                        document.querySelectorAll('div.leftMiddleColumns li.artists-grid-item > a').forEach(a => {
+                            if (a.href) {
+                                let url;
+                                try {
+                                    url = new URL(a.href);
+                                    // Construct the new URL, ensuring it points to /music
+                                    const newUrl = url.origin + '/music';
+                                    links.add(newUrl);
+                                } catch (e) {
+                                    console.error('Error parsing URL:', a.href, e);
+                                }
+                            }
+                        });
+                        return Array.from(links);
+                    })();
+                `
             });
-            if (results && results[0]) {
-                artistName = results[0];
-            }
-        } catch (e) { console.error("Could not get artist name for SA format", e); }
-        if (!artistName) {
-            artistName = urlMatch[1]; // Fallback to subdomain
+            artistLinks = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
+        } catch (e) {
+            console.error("ERROR: copyReleasesLinks: Failed to inject script to scrape artist links.", e);
+            await showPageNotification(activeTab.id, "Error scanning page for artist links.", "error");
+            return;
         }
 
-        const artistLine = `${artistName}:`;
-        const pageLine = `\t${activeTab.url}:`;
-        const releaseLines = releaseUrls.map(url => `\t\t${url}`).join('\n');
-        outputString = `${artistLine}\n${pageLine}\n${releaseLines}`;
+        if (artistLinks.length === 0) {
+            await showPageNotification(activeTab.id, "No artist links found on this page.", "error");
+            return;
+        }
 
-    } else {
-        outputString = releaseUrls.join('\n');
+        // Join with two newlines for a blank line
+        const outputString = artistLinks.join('\n\n');
+        const copySuccess = await copyTextToClipboard(outputString);
+
+        if (copySuccess) {
+            await showPageNotification(activeTab.id, `${artistLinks.length} artist link(s) copied!`, "success");
+        } else {
+            await showPageNotification(activeTab.id, "Failed to copy artist links.", "error");
+        }
+        return; // End execution here for this case
     }
     
-    const copySuccess = await copyTextToClipboard(outputString);
+    // Existing logic for main artist page and /music page
+    if (artistPageRegex.test(url)) {
+        const settings = await browser.storage.local.get({ saFormatEnabled: false });
 
-    if (copySuccess) {
-        await showPageNotification(activeTab.id, `${releaseUrls.length} release link(s) copied!`, "success");
-    } else {
-        await showPageNotification(activeTab.id, "Failed to copy release links.", "error");
+        await showPageNotification(activeTab.id, "Scanning artist page for all release links...", "success", 2000);
+
+        let releaseUrls;
+        try {
+            const results = await browser.tabs.executeScript(activeTab.id, {
+                code: `
+                    (function() {
+                        const links = new Set();
+                        document.querySelectorAll('#music-grid li a, .music-grid li a, .item-grid a, .featured-releases a').forEach(a => {
+                            if (a.href && (a.href.includes('/album/') || a.href.includes('/track/'))) {
+                                links.add(a.href);
+                            }
+                        });
+                        return Array.from(links);
+                    })();
+                `
+            });
+            releaseUrls = (results && results[0] && Array.isArray(results[0])) ? results[0] : [];
+        } catch (e) {
+            console.error("ERROR: copyReleasesLinks: Failed to inject script to scrape release links.", e);
+            await showPageNotification(activeTab.id, "Error scanning page for releases.", "error");
+            return;
+        }
+
+        if (releaseUrls.length === 0) {
+            console.log("INFO: copyReleasesLinks: No album/track links found on the artist page.");
+            await showPageNotification(activeTab.id, "No release links found on this page.", "error");
+            return;
+        }
+
+        let outputString;
+
+        if (settings.saFormatEnabled) {
+            let artistName;
+            try {
+                const results = await browser.tabs.executeScript(activeTab.id, {
+                    code: `(function() { const el = document.querySelector('.band-name, #band-name, span.title'); return el ? el.textContent.trim() : null; })();`
+                });
+                if (results && results[0]) {
+                    artistName = results[0];
+                }
+            } catch (e) { console.error("Could not get artist name for SA format", e); }
+            if (!artistName) {
+                const urlMatch = url.match(artistPageRegex);
+                artistName = urlMatch[1];
+            }
+
+            const artistLine = `${artistName}:`;
+            const pageLine = `\t${activeTab.url}:`;
+            const releaseLines = releaseUrls.map(url => `\t\t${url}`).join('\n');
+            outputString = `${artistLine}\n${pageLine}\n${releaseLines}`;
+
+        } else {
+            outputString = releaseUrls.join('\n');
+        }
+        
+        const copySuccess = await copyTextToClipboard(outputString);
+
+        if (copySuccess) {
+            await showPageNotification(activeTab.id, `${releaseUrls.length} release link(s) copied!`, "success");
+        } else {
+            await showPageNotification(activeTab.id, "Failed to copy release links.", "error");
+        }
+        return;
     }
+
+    // Fallback error message if no regex matches
+    await showPageNotification(activeTab.id, "This feature only works on an artist's main, /music, or /artists page.", "error");
 }
 
 async function copyReleasesAndTitles() {

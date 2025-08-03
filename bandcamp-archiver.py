@@ -582,13 +582,14 @@ def create_safe_filename(name: str) -> str:
     
     # 6. Collapse multiple hyphens to one.
     clean_name = re.sub(r'-+', '-', clean_name)
-    
-    # 7. Remove trailing dot.
-    clean_name = re.sub(r'\.$', '', clean_name)
-    
-    # 8. Trim whitespace.
+
+    # 7. Trim whitespace.
     clean_name = clean_name.strip()
     
+    # 8. Remove trailing dot.
+    while clean_name and (clean_name.endswith('.') or clean_name.endswith(' ')):
+        clean_name = clean_name[:-1]
+
     return f"{clean_name}"
 
 def create_and_truncate_filename(artist, title, item_id, is_track=False, track_info=None):
@@ -601,18 +602,23 @@ def create_and_truncate_filename(artist, title, item_id, is_track=False, track_i
     target_len = 95
     ellipsis = "(...)"
 
+    # Escape any curly braces in the input strings to prevent format errors.
+    safe_title = title.replace("{", "{{").replace("}", "}}")
+    safe_artist = artist.replace("{", "{{").replace("}", "}}") if artist else None
+
     if is_track and track_info:
         # Track format
         track_num = track_info.get('num')
-        track_artist = track_info.get('artist')
+        # Also escape the track_artist if it exists
+        track_artist = track_info.get('artist', '').replace("{", "{{").replace("}", "}}")
         # The template for the filename, with a placeholder for the title
         template = f"{track_num} - {track_artist} - {{title}} [{item_id}]"
     else:
         # Album format
-        template = f"{artist} - {{title}} [{item_id}]"
+        template = f"{safe_artist} - {{title}} [{item_id}]"
 
     # Construct the full potential filename to check its length
-    full_filename_check = template.format(title=title)
+    full_filename_check = template.format(title=safe_title)
 
     if len(full_filename_check) > max_len:
         # Calculate the length of the template parts without the title
@@ -625,10 +631,10 @@ def create_and_truncate_filename(artist, title, item_id, is_track=False, track_i
             available_len_for_title = 0
             
         truncated_title = title[:available_len_for_title]
-        final_title = f"{truncated_title}{ellipsis}"
-        final_filename_str = template.format(title=final_title)
+        final_title_escaped = f"{truncated_title.replace('{', '{{').replace('}', '}}')}{ellipsis}"
+        final_filename_str = template.format(title=final_title_escaped)
     else:
-        final_filename_str = full_filename_check
+        final_filename_str = template.format(title=safe_title)
 
     return create_safe_filename(final_filename_str)
 

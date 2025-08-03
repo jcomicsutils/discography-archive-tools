@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', function () {
     browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
         const currentUrl = (tabs && tabs.length > 0) ? tabs[0].url : '';
         const onBandcampAny = currentUrl.includes('bandcamp.com');
-        const onBandcampArtist = onBandcampAny && /^https?:\/\/([^\/]+)\.bandcamp\.com\/(music\/?|[?#]|$)/.test(currentUrl);
+        const onBandcampArtist = onBandcampAny && (/^https?:\/\/([^\/]+)\.bandcamp\.com\/(music\/?|[?#]|$)/.test(currentUrl) || currentUrl.includes('/artists'));
         const onBandcampAlbumTrack = onBandcampAny && /bandcamp\.com\/(album|track)\//.test(currentUrl);
         const onArchive = currentUrl.includes('archive.org/download/');
 
